@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/RelayWorks.ControlPlane.Api/RelayWorks.ControlPlane.Api.csproj" />
+    <Project Path="src/RelayWorks.Application/RelayWorks.Application.csproj" />
+    <Project Path="src/RelayWorks.Contracts/RelayWorks.Contracts.csproj" />
+    <Project Path="src/RelayWorks.Domain/RelayWorks.Domain.csproj" />
+    <Project Path="src/RelayWorks.Infrastructure/RelayWorks.Infrastructure.csproj" />
+    <Project Path="src/RelayWorks.Sync.Worker/RelayWorks.Sync.Worker.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/RelayWorks.Domain.Tests/RelayWorks.Domain.Tests.csproj" />
+    <Project Path="tests/RelayWorks.Sync.Worker.Tests/RelayWorks.Sync.Worker.Tests.csproj" />
+  </Folder>
+</Solution>

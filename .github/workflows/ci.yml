@@ -1,0 +1,48 @@
+name: RelayWorks CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  dotnet:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet restore RelayWorks.slnx
+      - run: dotnet build RelayWorks.slnx --configuration Release --no-restore
+      - run: dotnet test RelayWorks.slnx --configuration Release --no-build
+
+  console:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web/relayworks-console
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/relayworks-console/package-lock.json
+      - run: npm ci
+      - run: npm run build
+
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/environments/dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform fmt -check -recursive ../../../infra
+      - run: terraform init -backend=false
+      - run: terraform validate

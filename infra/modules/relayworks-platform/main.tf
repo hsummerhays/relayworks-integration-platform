@@ -1,0 +1,339 @@
+data "azurerm_client_config" "current" {}
+
+locals {
+  name = "${var.name_prefix}-${var.environment}"
+}
+
+resource "azurerm_resource_group" "main" {
+  name     = "rg-${local.name}"
+  location = var.location
+  tags     = var.tags
+}
+
+resource "azurerm_log_analytics_workspace" "main" {
+  name                = "log-${local.name}"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  sku                 = "PerGB2018"
+  retention_in_days   = 30
+  tags                = var.tags
+}
+
+resource "azurerm_application_insights" "main" {
+  name                = "appi-${local.name}"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  workspace_id        = azurerm_log_analytics_workspace.main.id
+  application_type    = "web"
+  tags                = var.tags
+}
+
+resource "azurerm_static_web_app" "console" {
+  name                = "swa-${local.name}-console"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+  sku_tier            = "Free"
+  sku_size            = "Free"
+  tags                = var.tags
+}
+
+resource "azurerm_container_registry" "main" {
+  name                = replace("acr${local.name}", "-", "")
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+  sku                 = "Basic"
+  admin_enabled       = false
+  tags                = var.tags
+}
+
+resource "azurerm_container_app_environment" "main" {
+  name                       = "cae-${local.name}"
+  location                   = azurerm_resource_group.main.location
+  resource_group_name        = azurerm_resource_group.main.name
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
+  infrastructure_subnet_id   = azurerm_subnet.container_apps.id
+  tags                       = var.tags
+}
+
+resource "azurerm_virtual_network" "main" {
+  name                = "vnet-${local.name}"
+  address_space       = ["10.42.0.0/16"]
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  tags                = var.tags
+}
+
+resource "azurerm_subnet" "container_apps" {
+  name                 = "snet-container-apps"
+  resource_group_name  = azurerm_resource_group.main.name
+  virtual_network_name = azurerm_virtual_network.main.name
+  address_prefixes     = ["10.42.0.0/23"]
+
+  delegation {
+    name = "container-app-environments"
+    service_delegation {
+      name    = "Microsoft.App/environments"
+      actions = ["Microsoft.Network/virtualNetworks/subnets/join/action"]
+    }
+  }
+}
+
+resource "azurerm_subnet" "private_endpoints" {
+  name                 = "snet-private-endpoints"
+  resource_group_name  = azurerm_resource_group.main.name
+  virtual_network_name = azurerm_virtual_network.main.name
+  address_prefixes     = ["10.42.2.0/24"]
+}
+
+resource "azurerm_servicebus_namespace" "main" {
+  name                = "sb-${local.name}"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  sku                 = "Standard"
+  local_auth_enabled  = false
+  tags                = var.tags
+}
+
+resource "azurerm_servicebus_queue" "commands" {
+  name                                    = "integration-commands"
+  namespace_id                            = azurerm_servicebus_namespace.main.id
+  requires_duplicate_detection            = true
+  duplicate_detection_history_time_window = "PT10M"
+  dead_lettering_on_message_expiration    = true
+  max_delivery_count                      = 10
+}
+
+resource "azurerm_servicebus_topic" "events" {
+  name                                    = "integration-events"
+  namespace_id                            = azurerm_servicebus_namespace.main.id
+  requires_duplicate_detection            = true
+  duplicate_detection_history_time_window = "PT10M"
+}
+
+resource "azurerm_servicebus_subscription" "control_plane" {
+  name               = "control-plane"
+  topic_id           = azurerm_servicebus_topic.events.id
+  max_delivery_count = 10
+}
+
+resource "azurerm_mssql_server" "main" {
+  name                          = "sql-${local.name}"
+  resource_group_name           = azurerm_resource_group.main.name
+  location                      = azurerm_resource_group.main.location
+  version                       = "12.0"
+  minimum_tls_version           = "1.2"
+  public_network_access_enabled = false
+  tags                          = var.tags
+
+  azuread_administrator {
+    login_username              = var.sql_entra_admin_login
+    object_id                   = var.sql_entra_admin_object_id
+    tenant_id                   = var.tenant_id
+    azuread_authentication_only = true
+  }
+}
+
+resource "azurerm_private_dns_zone" "sql" {
+  name                = "privatelink.database.windows.net"
+  resource_group_name = azurerm_resource_group.main.name
+  tags                = var.tags
+}
+
+resource "azurerm_private_dns_zone_virtual_network_link" "sql" {
+  name                  = "sql-vnet-link"
+  resource_group_name   = azurerm_resource_group.main.name
+  private_dns_zone_name = azurerm_private_dns_zone.sql.name
+  virtual_network_id    = azurerm_virtual_network.main.id
+}
+
+resource "azurerm_private_endpoint" "sql" {
+  name                = "pe-${local.name}-sql"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  subnet_id           = azurerm_subnet.private_endpoints.id
+  tags                = var.tags
+
+  private_service_connection {
+    name                           = "sql-private-connection"
+    private_connection_resource_id = azurerm_mssql_server.main.id
+    subresource_names              = ["sqlServer"]
+    is_manual_connection           = false
+  }
+
+  private_dns_zone_group {
+    name                 = "sql-private-dns"
+    private_dns_zone_ids = [azurerm_private_dns_zone.sql.id]
+  }
+}
+
+resource "azurerm_mssql_database" "control_plane" {
+  name                        = "relayworks-control"
+  server_id                   = azurerm_mssql_server.main.id
+  sku_name                    = "GP_S_Gen5_1"
+  min_capacity                = 0.5
+  auto_pause_delay_in_minutes = 60
+  max_size_gb                 = 32
+  zone_redundant              = false
+  tags                        = var.tags
+}
+
+resource "azurerm_key_vault" "main" {
+  name                       = substr(replace("kv-${local.name}", "-", ""), 0, 24)
+  location                   = azurerm_resource_group.main.location
+  resource_group_name        = azurerm_resource_group.main.name
+  tenant_id                  = var.tenant_id
+  sku_name                   = "standard"
+  enable_rbac_authorization  = true
+  purge_protection_enabled   = true
+  soft_delete_retention_days = 7
+  tags                       = var.tags
+}
+
+resource "azurerm_user_assigned_identity" "control_plane" {
+  name                = "id-${local.name}-control"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  tags                = var.tags
+}
+
+resource "azurerm_user_assigned_identity" "sync_worker" {
+  name                = "id-${local.name}-worker"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  tags                = var.tags
+}
+
+resource "azurerm_role_assignment" "control_acr_pull" {
+  scope                = azurerm_container_registry.main.id
+  role_definition_name = "AcrPull"
+  principal_id         = azurerm_user_assigned_identity.control_plane.principal_id
+}
+
+resource "azurerm_role_assignment" "worker_acr_pull" {
+  scope                = azurerm_container_registry.main.id
+  role_definition_name = "AcrPull"
+  principal_id         = azurerm_user_assigned_identity.sync_worker.principal_id
+}
+
+resource "azurerm_role_assignment" "control_servicebus_sender" {
+  scope                = azurerm_servicebus_namespace.main.id
+  role_definition_name = "Azure Service Bus Data Sender"
+  principal_id         = azurerm_user_assigned_identity.control_plane.principal_id
+}
+
+resource "azurerm_role_assignment" "control_servicebus_receiver" {
+  scope                = azurerm_servicebus_namespace.main.id
+  role_definition_name = "Azure Service Bus Data Receiver"
+  principal_id         = azurerm_user_assigned_identity.control_plane.principal_id
+}
+
+resource "azurerm_role_assignment" "worker_servicebus_sender" {
+  scope                = azurerm_servicebus_namespace.main.id
+  role_definition_name = "Azure Service Bus Data Sender"
+  principal_id         = azurerm_user_assigned_identity.sync_worker.principal_id
+}
+
+resource "azurerm_role_assignment" "worker_servicebus_receiver" {
+  scope                = azurerm_servicebus_namespace.main.id
+  role_definition_name = "Azure Service Bus Data Receiver"
+  principal_id         = azurerm_user_assigned_identity.sync_worker.principal_id
+}
+
+resource "azurerm_container_app" "control_plane" {
+  name                         = "ca-${local.name}-control"
+  container_app_environment_id = azurerm_container_app_environment.main.id
+  resource_group_name          = azurerm_resource_group.main.name
+  revision_mode                = "Single"
+  tags                         = var.tags
+
+  identity {
+    type         = "UserAssigned"
+    identity_ids = [azurerm_user_assigned_identity.control_plane.id]
+  }
+
+  registry {
+    server   = azurerm_container_registry.main.login_server
+    identity = azurerm_user_assigned_identity.control_plane.id
+  }
+
+  template {
+    min_replicas = 1
+    max_replicas = 3
+    container {
+      name   = "control-plane"
+      image  = var.control_plane_image
+      cpu    = 0.5
+      memory = "1Gi"
+      env {
+        name  = "AZURE_CLIENT_ID"
+        value = azurerm_user_assigned_identity.control_plane.client_id
+      }
+      env {
+        name  = "ServiceBus__FullyQualifiedNamespace"
+        value = "${azurerm_servicebus_namespace.main.name}.servicebus.windows.net"
+      }
+      env {
+        name  = "APPLICATIONINSIGHTS_CONNECTION_STRING"
+        value = azurerm_application_insights.main.connection_string
+      }
+      env {
+        name  = "ConnectionStrings__RelayWorks"
+        value = "Server=tcp:${azurerm_mssql_server.main.fully_qualified_domain_name},1433;Database=${azurerm_mssql_database.control_plane.name};Authentication=Active Directory Default;Encrypt=True;TrustServerCertificate=False"
+      }
+      env {
+        name  = "Cors__AllowedOrigins__0"
+        value = "https://${azurerm_static_web_app.console.default_host_name}"
+      }
+    }
+  }
+
+  ingress {
+    external_enabled = true
+    target_port      = 8080
+    traffic_weight {
+      percentage      = 100
+      latest_revision = true
+    }
+  }
+}
+
+resource "azurerm_container_app" "sync_worker" {
+  name                         = "ca-${local.name}-worker"
+  container_app_environment_id = azurerm_container_app_environment.main.id
+  resource_group_name          = azurerm_resource_group.main.name
+  revision_mode                = "Single"
+  tags                         = var.tags
+
+  identity {
+    type         = "UserAssigned"
+    identity_ids = [azurerm_user_assigned_identity.sync_worker.id]
+  }
+
+  registry {
+    server   = azurerm_container_registry.main.login_server
+    identity = azurerm_user_assigned_identity.sync_worker.id
+  }
+
+  template {
+    min_replicas = 1
+    max_replicas = 5
+    container {
+      name   = "sync-worker"
+      image  = var.sync_worker_image
+      cpu    = 0.5
+      memory = "1Gi"
+      env {
+        name  = "AZURE_CLIENT_ID"
+        value = azurerm_user_assigned_identity.sync_worker.client_id
+      }
+      env {
+        name  = "ServiceBus__FullyQualifiedNamespace"
+        value = "${azurerm_servicebus_namespace.main.name}.servicebus.windows.net"
+      }
+      env {
+        name  = "APPLICATIONINSIGHTS_CONNECTION_STRING"
+        value = azurerm_application_insights.main.connection_string
+      }
+    }
+  }
+}

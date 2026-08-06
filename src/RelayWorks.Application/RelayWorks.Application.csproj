@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../RelayWorks.Contracts/RelayWorks.Contracts.csproj" />
+    <ProjectReference Include="../RelayWorks.Domain/RelayWorks.Domain.csproj" />
+  </ItemGroup>
+</Project>
