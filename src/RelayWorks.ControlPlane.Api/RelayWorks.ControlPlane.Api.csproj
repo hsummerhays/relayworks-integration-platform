@@ -5,6 +5,7 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <PackageReference Include="Microsoft.Identity.Web" Version="4.5.0" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../RelayWorks.Application/RelayWorks.Application.csproj" />

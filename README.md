@@ -1,6 +1,6 @@
 # RelayWorks Integration Platform
 
-RelayWorks is a .NET and Vue reference platform for reliable construction-system integrations. Iteration 4 adds tenant-scoped, capability-aware connector execution to the record-safe Control Plane and Sync Worker services.
+RelayWorks is a .NET and Vue reference platform for reliable construction-system integrations. Iteration 5 adds scalable, managed-identity secret resolution to the record-safe, capability-aware Control Plane and Sync Worker services.
 
 ## Implemented vertical slice
 
@@ -58,6 +58,7 @@ Both EF Core migration sets are intended to run from an approved deployment job.
 | Record projection and premium operations console | Implemented |
 | Versioned connection profiles and capability snapshots | Implemented |
 | Confirmed-no-commit retry and read-after-write recovery | Implemented with simulated connector |
+| Coalesced Key Vault cache and configurable vault routing | Implemented |
 | Terraform Azure environment | Implemented, not applied |
 | Real vendor connectors and identity/authz | Planned |
 | OpenTelemetry and automated ledger retention | Planned |

@@ -9,6 +9,7 @@ public sealed class RelayWorksDbContext(DbContextOptions<RelayWorksDbContext> op
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
     public DbSet<IntegrationRecordProjection> IntegrationRecordProjections => Set<IntegrationRecordProjection>();
     public DbSet<ConnectionProfile> ConnectionProfiles => Set<ConnectionProfile>();
+    public DbSet<OperatorAuditRecord> OperatorAuditRecords => Set<OperatorAuditRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -51,5 +52,12 @@ public sealed class RelayWorksDbContext(DbContextOptions<RelayWorksDbContext> op
         connections.Property(x => x.SecretReference).HasMaxLength(300);
         connections.Property(x => x.ConfigurationVersion).HasMaxLength(32);
         connections.HasIndex(x => new { x.TenantId, x.Name }).IsUnique();
+
+        var audit = modelBuilder.Entity<OperatorAuditRecord>();
+        audit.ToTable("OperatorAuditRecords"); audit.HasKey(x => x.Id);
+        audit.Property(x => x.ActorId).HasMaxLength(100); audit.Property(x => x.Action).HasMaxLength(100);
+        audit.Property(x => x.ResourceType).HasMaxLength(100); audit.Property(x => x.ResourceId).HasMaxLength(200);
+        audit.Property(x => x.Detail).HasMaxLength(2000);
+        audit.HasIndex(x => new { x.TenantId, x.OccurredAtUtc });
     }
 }

@@ -9,6 +9,7 @@ module "relayworks" {
   sql_entra_admin_object_id = var.sql_entra_admin_object_id
   control_plane_image       = var.control_plane_image
   sync_worker_image         = var.sync_worker_image
+  control_plane_api_client_id = var.control_plane_api_client_id
 
   tags = {
     application = "relayworks"

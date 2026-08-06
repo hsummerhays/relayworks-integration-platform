@@ -16,7 +16,13 @@ public sealed record ConnectorExecutionProfileV1(
     bool SupportsReadAfterWrite,
     int MaxConfirmedNoCommitRetries,
     string ConfigurationVersion,
-    string SecretReference);
+    SecretLocatorV1 Secret);
+
+public sealed record SecretLocatorV1(
+    Uri VaultUri,
+    string SecretName,
+    string? SecretVersion = null,
+    string? RoutingKey = null);
 
 public sealed record IntegrationRunCompletedV1(
     Guid MessageId,

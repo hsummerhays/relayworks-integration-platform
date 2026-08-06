@@ -38,6 +38,8 @@ sequenceDiagram
 - Worker events use a transactional outbox; Control projections use a natural unique key and upsert.
 - Connection capabilities are snapshotted into each command; only proven no-commit failures are retryable.
 - Read-after-write recovery can convert an unknown outcome to success only when the connector proves the destination record exists.
+- The Worker resolves a structured Key Vault locator once per run through a coalescing five-minute cache.
+- Vault routing can be overridden per tenant or region without changing message contracts.
 
 This is not exactly-once delivery. It is an explicit duplicate-avoidance protocol with a human reconciliation path for unknowable external outcomes.
 

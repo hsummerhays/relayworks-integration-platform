@@ -1,5 +1,25 @@
 # Changelog
 
+## Iteration 6 — 2026-08-06
+
+- Added Microsoft Entra ID bearer authentication with a secure fallback authorization policy.
+- Derived tenant identity from a signed token claim instead of trusting query or request values.
+- Enforced tenant filters across runs, record details, connections, reconciliation, and audit APIs.
+- Added immutable operator audit records for connection creation and manual reconciliation.
+- Added development-only authentication bypass with a fixed configured tenant.
+- Added Terraform inputs and Container App settings for the API app registration.
+
+## Iteration 5 — 2026-08-06
+
+- Replaced opaque secret references in execution messages with structured vault, name, version, and routing fields.
+- Added Azure Key Vault secret resolution using managed identity.
+- Added a five-minute in-memory cache with concurrent request coalescing and a short failure cooldown.
+- Added cache hit, miss, and refresh-failure metrics without tenant or secret values as dimensions.
+- Added configurable tenant/region vault routing while retaining a shared-vault default.
+- Changed Worker execution to construct one credentialed destination connector per run.
+- Added a 5,000-request concurrency test that produces one underlying secret-provider call.
+- Added masked credential status to the connection-management console.
+
 ## Iteration 4 — 2026-08-06
 
 - Added tenant-scoped connection profiles with versioned capability snapshots on run commands.

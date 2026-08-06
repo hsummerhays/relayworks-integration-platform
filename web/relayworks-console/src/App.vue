@@ -126,12 +126,12 @@ onMounted(async () => { await Promise.all([refreshRuns(), loadConnections()]) })
         <div class="connection-grid">
           <article v-for="connection in connections" :key="connection.id" class="connection-card">
             <div><strong>{{ connection.name }}</strong><small>{{ connection.provider }} · {{ connection.configurationVersion.slice(0, 8) }}</small></div>
-            <div class="capabilities"><span :class="{ enabled: connection.supportsIdempotencyKey }">Idempotency key</span><span :class="{ enabled: connection.supportsReadAfterWrite }">Read after write</span><span>{{ connection.maxConfirmedNoCommitRetries }} safe retries</span></div>
+            <div class="capabilities"><span class="enabled">Credential configured</span><span :class="{ enabled: connection.supportsIdempotencyKey }">Idempotency key</span><span :class="{ enabled: connection.supportsReadAfterWrite }">Read after write</span><span>{{ connection.maxConfirmedNoCommitRetries }} safe retries</span></div>
           </article>
           <form class="connection-form" @submit.prevent="saveConnection">
             <label>Connection name<input v-model.trim="connectionForm.name" required placeholder="FieldFlo → Sage 100" /></label>
             <label>Provider<input v-model.trim="connectionForm.provider" required /></label>
-            <label>Key Vault secret reference<input v-model.trim="connectionForm.secretReference" required placeholder="kv://relayworks/connections/customer" /></label>
+            <label>Key Vault secret URI<input v-model.trim="connectionForm.secretReference" required placeholder="https://vault.vault.azure.net/secrets/customer" /></label>
             <label class="check"><input v-model="connectionForm.supportsIdempotencyKey" type="checkbox" /> Native idempotency key</label>
             <label class="check"><input v-model="connectionForm.supportsReadAfterWrite" type="checkbox" /> Read-after-write lookup</label>
             <label>Safe retries<input v-model.number="connectionForm.maxConfirmedNoCommitRetries" type="number" min="0" max="10" /></label>

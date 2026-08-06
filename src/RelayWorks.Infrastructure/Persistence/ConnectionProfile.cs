@@ -26,15 +26,29 @@ public sealed class ConnectionProfile
         if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(provider)) throw new ArgumentException("Name and provider are required.");
         if (maxRetries is < 0 or > 10) throw new ArgumentOutOfRangeException(nameof(maxRetries));
         if (string.IsNullOrWhiteSpace(secretReference)) throw new ArgumentException("A Key Vault secret reference is required.");
-        return new ConnectionProfile
+        var profile = new ConnectionProfile
         {
             Id = id, TenantId = tenantId, Name = name.Trim(), Provider = provider.Trim(),
             SupportsIdempotencyKey = supportsIdempotencyKey, SupportsReadAfterWrite = supportsReadAfterWrite,
             MaxConfirmedNoCommitRetries = maxRetries, SecretReference = secretReference.Trim(),
             ConfigurationVersion = Guid.NewGuid().ToString("N"), IsActive = true, UpdatedAtUtc = now
         };
+        _ = profile.ParseSecretReference();
+        return profile;
     }
 
     public ConnectorExecutionProfileV1 Snapshot() => new(Provider, SupportsIdempotencyKey,
-        SupportsReadAfterWrite, MaxConfirmedNoCommitRetries, ConfigurationVersion, SecretReference);
+        SupportsReadAfterWrite, MaxConfirmedNoCommitRetries, ConfigurationVersion, ParseSecretReference());
+
+    private SecretLocatorV1 ParseSecretReference()
+    {
+        // Format: https://vault-name.vault.azure.net/secrets/secret-name[/version]
+        if (!Uri.TryCreate(SecretReference, UriKind.Absolute, out var uri))
+            throw new ArgumentException("SecretReference must be an absolute Key Vault secret URI.");
+        var parts = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 2 || !parts[0].Equals("secrets", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("SecretReference must identify a Key Vault secret.");
+        return new SecretLocatorV1(new Uri(uri.GetLeftPart(UriPartial.Authority)), parts[1],
+            parts.Length > 2 ? parts[2] : null, TenantId.ToString("N"));
+    }
 }

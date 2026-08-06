@@ -301,6 +301,9 @@ resource "azurerm_container_app" "control_plane" {
         name  = "Cors__AllowedOrigins__0"
         value = "https://${azurerm_static_web_app.console.default_host_name}"
       }
+      env { name = "Authentication__Enabled" value = "true" }
+      env { name = "AzureAd__TenantId" value = var.tenant_id }
+      env { name = "AzureAd__ClientId" value = var.control_plane_api_client_id }
     }
   }
 

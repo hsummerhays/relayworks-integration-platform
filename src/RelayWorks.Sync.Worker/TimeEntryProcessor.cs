@@ -10,7 +10,7 @@ namespace RelayWorks.Sync.Worker;
 
 public sealed class TimeEntryProcessor(
     ITimeEntrySourceConnector sourceConnector,
-    ITimeEntryDestinationConnector destinationConnector,
+    ITimeEntryDestinationConnectorFactory destinationFactory,
     WorkerLedgerDbContext dbContext)
 {
     public async Task<IntegrationRunCompletedV1> ProcessAsync(
@@ -22,8 +22,10 @@ public sealed class TimeEntryProcessor(
             return BuildCompletion(command, await ResultsForRun(command.RunId, cancellationToken), completedAtUtc);
 
         var reported = new List<IntegrationRecordResultV1>();
+        var profile = command.ConnectorProfile ?? throw new InvalidOperationException("A connector profile snapshot is required.");
+        var destinationConnector = await destinationFactory.CreateAsync(profile, cancellationToken);
         foreach (var entry in sourceConnector.Read(command))
-            reported.Add(await ProcessRecord(command, entry, completedAtUtc, cancellationToken));
+            reported.Add(await ProcessRecord(command, entry, profile, destinationConnector, completedAtUtc, cancellationToken));
 
         dbContext.InboxMessages.Add(new WorkerInboxMessage
         {
@@ -43,12 +45,12 @@ public sealed class TimeEntryProcessor(
     private async Task<IntegrationRecordResultV1> ProcessRecord(
         IntegrationRunRequestedV1 command,
         CanonicalTimeEntryV1 entry,
+        ConnectorExecutionProfileV1 profile,
+        ITimeEntryDestinationConnector destinationConnector,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
         var fingerprint = Fingerprint(entry);
-        var profile = command.ConnectorProfile ?? new ConnectorExecutionProfileV1(
-            "SimulatedAccounting", false, false, 0, "legacy-default", "none");
         var destinationKey = $"{command.TenantId:N}:{command.ConnectionId:N}:{command.Operation}:{entry.SourceRecordId}:{entry.SourceVersion}";
         var existing = await dbContext.RecordDeliveries.SingleOrDefaultAsync(x =>
             x.TenantId == command.TenantId && x.ConnectionId == command.ConnectionId &&

@@ -29,6 +29,7 @@ variable "control_plane_image" {
 variable "sync_worker_image" {
   type = string
 }
+variable "control_plane_api_client_id" { type = string }
 
 variable "tags" {
   type = map(string)
