@@ -7,7 +7,16 @@ public sealed record IntegrationRunRequestedV1(
     Guid ConnectionId,
     string Operation,
     int TotalRecords,
-    DateTimeOffset OccurredAtUtc);
+    DateTimeOffset OccurredAtUtc,
+    ConnectorExecutionProfileV1? ConnectorProfile = null);
+
+public sealed record ConnectorExecutionProfileV1(
+    string Provider,
+    bool SupportsIdempotencyKey,
+    bool SupportsReadAfterWrite,
+    int MaxConfirmedNoCommitRetries,
+    string ConfigurationVersion,
+    string SecretReference);
 
 public sealed record IntegrationRunCompletedV1(
     Guid MessageId,

@@ -1,5 +1,15 @@
 # Changelog
 
+## Iteration 4 — 2026-08-06
+
+- Added tenant-scoped connection profiles with versioned capability snapshots on run commands.
+- Distinguished confirmed no-commit failures from unknown outcomes and bounded only safe retries.
+- Added read-after-write reconciliation for connectors that can prove an ambiguous write committed.
+- Added Key Vault secret references without placing credentials in messages or configuration records.
+- Granted the Worker managed identity least-privilege Key Vault secret access in Terraform.
+- Added a connector registry and capability editor to the Vue operations console.
+- Added a recovery test for ambiguous writes confirmed by destination lookup.
+
 ## Iteration 3 — 2026-08-06
 
 - Added a Worker-owned Azure SQL database with a durable processed-record ledger, inbox, and outbox.

@@ -52,3 +52,19 @@ export interface IntegrationRecordResult {
   resolutionNotes: string | null
   updatedAtUtc: string
 }
+
+export interface ConnectionProfile {
+  id: string
+  tenantId: string
+  name: string
+  provider: string
+  supportsIdempotencyKey: boolean
+  supportsReadAfterWrite: boolean
+  maxConfirmedNoCommitRetries: number
+  secretReference: string
+  configurationVersion: string
+  isActive: boolean
+  updatedAtUtc: string
+}
+
+export type CreateConnectionProfileRequest = Omit<ConnectionProfile, 'configurationVersion' | 'isActive' | 'updatedAtUtc'>

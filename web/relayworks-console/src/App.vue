@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { listIntegrationRuns, listRunRecords, resolveIssue, submitIntegrationRun } from './api'
-import { demoRecords, demoRuns } from './demoData'
-import type { IntegrationRecordResult, IntegrationRun, SubmitIntegrationRunRequest } from './types'
+import { createConnection, listConnections, listIntegrationRuns, listRunRecords, resolveIssue, submitIntegrationRun } from './api'
+import { demoConnections, demoRecords, demoRuns } from './demoData'
+import type { ConnectionProfile, CreateConnectionProfileRequest, IntegrationRecordResult, IntegrationRun, SubmitIntegrationRunRequest } from './types'
 
 const runs = ref<IntegrationRun[]>([])
 const records = ref<IntegrationRecordResult[]>([])
+const connections = ref<ConnectionProfile[]>([])
 const selectedRunId = ref('')
 const loading = ref(true)
 const recordsLoading = ref(false)
@@ -15,6 +16,11 @@ const message = ref('')
 const filter = ref<'all' | 'attention' | 'resolved'>('attention')
 const theme = ref(localStorage.getItem('relayworks-theme') ?? 'dark')
 const resolutionNotes = reactive<Record<string, string>>({})
+const connectionForm = reactive<CreateConnectionProfileRequest>({
+  id: crypto.randomUUID(), tenantId: '5d963a18-c113-4bea-b2c7-c71a121e9f4b', name: '',
+  provider: 'FieldFloAccounting', supportsIdempotencyKey: true, supportsReadAfterWrite: true,
+  maxConfirmedNoCommitRetries: 2, secretReference: '',
+})
 
 const form = reactive<SubmitIntegrationRunRequest>({
   tenantId: '5d963a18-c113-4bea-b2c7-c71a121e9f4b',
@@ -43,6 +49,19 @@ async function refreshRuns() {
     loading.value = false
     if (!selectedRunId.value && runs.value.length) selectedRunId.value = runs.value[0].id
   }
+}
+
+async function loadConnections() {
+  try { connections.value = await listConnections(form.tenantId) }
+  catch { connections.value = demoConnections }
+}
+
+async function saveConnection() {
+  try {
+    const created = await createConnection(connectionForm)
+    connections.value.push(created); form.connectionId = created.id
+    connectionForm.id = crypto.randomUUID(); connectionForm.name = ''; connectionForm.secretReference = ''
+  } catch (error) { message.value = error instanceof Error ? error.message : 'Unable to save connection.' }
 }
 
 async function loadRecords(runId: string) {
@@ -81,7 +100,7 @@ function toggleTheme() {
 }
 
 watch(selectedRunId, loadRecords)
-onMounted(refreshRuns)
+onMounted(async () => { await Promise.all([refreshRuns(), loadConnections()]) })
 </script>
 
 <template>
@@ -101,6 +120,25 @@ onMounted(refreshRuns)
         <article class="attention"><span>Open issues</span><strong>{{ attentionCount }}</strong><small>{{ ambiguousCount }} require reconciliation</small></article>
         <article><span>Records processed</span><strong>{{ processedRecords.toLocaleString() }}</strong><small>Current history window</small></article>
       </section>
+
+      <details class="panel connection-manager">
+        <summary><span><span class="eyebrow">Connector registry</span><strong>{{ connections.length }} configured connection{{ connections.length === 1 ? '' : 's' }}</strong></span><span>Manage capabilities</span></summary>
+        <div class="connection-grid">
+          <article v-for="connection in connections" :key="connection.id" class="connection-card">
+            <div><strong>{{ connection.name }}</strong><small>{{ connection.provider }} · {{ connection.configurationVersion.slice(0, 8) }}</small></div>
+            <div class="capabilities"><span :class="{ enabled: connection.supportsIdempotencyKey }">Idempotency key</span><span :class="{ enabled: connection.supportsReadAfterWrite }">Read after write</span><span>{{ connection.maxConfirmedNoCommitRetries }} safe retries</span></div>
+          </article>
+          <form class="connection-form" @submit.prevent="saveConnection">
+            <label>Connection name<input v-model.trim="connectionForm.name" required placeholder="FieldFlo → Sage 100" /></label>
+            <label>Provider<input v-model.trim="connectionForm.provider" required /></label>
+            <label>Key Vault secret reference<input v-model.trim="connectionForm.secretReference" required placeholder="kv://relayworks/connections/customer" /></label>
+            <label class="check"><input v-model="connectionForm.supportsIdempotencyKey" type="checkbox" /> Native idempotency key</label>
+            <label class="check"><input v-model="connectionForm.supportsReadAfterWrite" type="checkbox" /> Read-after-write lookup</label>
+            <label>Safe retries<input v-model.number="connectionForm.maxConfirmedNoCommitRetries" type="number" min="0" max="10" /></label>
+            <button class="primary-button" :disabled="apiUnavailable">Save connection</button>
+          </form>
+        </div>
+      </details>
 
       <section class="workspace">
         <div class="main-column">

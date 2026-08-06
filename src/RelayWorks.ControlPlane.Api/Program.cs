@@ -52,17 +52,23 @@ runs.MapGet("/", async (
 runs.MapPost("/", async (
     SubmitIntegrationRunRequest request,
     SubmitIntegrationRunHandler handler,
+    RelayWorksDbContext db,
     CancellationToken cancellationToken) =>
 {
     try
     {
+        var connection = await db.ConnectionProfiles.AsNoTracking().SingleOrDefaultAsync(x =>
+            x.Id == request.ConnectionId && x.TenantId == request.TenantId && x.IsActive, cancellationToken);
+        if (connection is null) return Results.ValidationProblem(new Dictionary<string, string[]>
+        { ["connectionId"] = ["An active connection profile is required for this tenant."] });
         var result = await handler.HandleAsync(
             new SubmitIntegrationRunCommand(
                 request.TenantId,
                 request.ConnectionId,
                 request.Operation,
                 request.IdempotencyKey,
-                request.TotalRecords),
+                request.TotalRecords,
+                connection.Snapshot()),
             cancellationToken);
 
         return result.IsDuplicate
@@ -76,6 +82,26 @@ runs.MapPost("/", async (
             [exception.ParamName ?? "request"] = [exception.Message]
         });
     }
+});
+
+var connections = app.MapGroup("/api/connections").WithTags("Connections");
+connections.MapGet("/", async (Guid tenantId, RelayWorksDbContext db, CancellationToken cancellationToken) =>
+    Results.Ok(await db.ConnectionProfiles.AsNoTracking().Where(x => x.TenantId == tenantId)
+        .OrderBy(x => x.Name).ToListAsync(cancellationToken)));
+connections.MapPost("/", async (CreateConnectionProfileRequest request, RelayWorksDbContext db,
+    TimeProvider timeProvider, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var profile = ConnectionProfile.Create(request.Id, request.TenantId, request.Name, request.Provider,
+            request.SupportsIdempotencyKey, request.SupportsReadAfterWrite,
+            request.MaxConfirmedNoCommitRetries, request.SecretReference, timeProvider.GetUtcNow());
+        db.ConnectionProfiles.Add(profile);
+        await db.SaveChangesAsync(cancellationToken);
+        return Results.Created($"/api/connections/{profile.Id}", profile);
+    }
+    catch (ArgumentException exception)
+    { return Results.ValidationProblem(new Dictionary<string, string[]> { ["connection"] = [exception.Message] }); }
 });
 
 runs.MapGet("/{runId:guid}/records", async (Guid runId, RelayWorksDbContext db, CancellationToken cancellationToken) =>
@@ -112,3 +138,7 @@ public sealed record SubmitIntegrationRunRequest(
     int TotalRecords);
 
 public sealed record ResolveReconciliationIssueRequest(string ResolutionNotes);
+
+public sealed record CreateConnectionProfileRequest(Guid Id, Guid TenantId, string Name, string Provider,
+    bool SupportsIdempotencyKey, bool SupportsReadAfterWrite, int MaxConfirmedNoCommitRetries,
+    string SecretReference);

@@ -36,6 +36,8 @@ sequenceDiagram
 - Terminal rows prevent a second destination call.
 - An interrupted or timed-out call becomes `UnknownOutcome`, never an automatic retry.
 - Worker events use a transactional outbox; Control projections use a natural unique key and upsert.
+- Connection capabilities are snapshotted into each command; only proven no-commit failures are retryable.
+- Read-after-write recovery can convert an unknown outcome to success only when the connector proves the destination record exists.
 
 This is not exactly-once delivery. It is an explicit duplicate-avoidance protocol with a human reconciliation path for unknowable external outcomes.
 

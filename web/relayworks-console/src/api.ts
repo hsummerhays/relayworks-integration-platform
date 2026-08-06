@@ -3,6 +3,8 @@ import type {
   SubmitIntegrationRunRequest,
   SubmitIntegrationRunResult,
   IntegrationRecordResult,
+  ConnectionProfile,
+  CreateConnectionProfileRequest,
 } from './types'
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5080'
@@ -12,6 +14,18 @@ async function ensureSuccess(response: Response): Promise<Response> {
 
   const detail = await response.text()
   throw new Error(detail || `Request failed with status ${response.status}`)
+}
+
+export async function listConnections(tenantId: string): Promise<ConnectionProfile[]> {
+  const response = await ensureSuccess(await fetch(`${apiBaseUrl}/api/connections?tenantId=${tenantId}`))
+  return response.json() as Promise<ConnectionProfile[]>
+}
+
+export async function createConnection(request: CreateConnectionProfileRequest): Promise<ConnectionProfile> {
+  const response = await ensureSuccess(await fetch(`${apiBaseUrl}/api/connections`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request),
+  }))
+  return response.json() as Promise<ConnectionProfile>
 }
 
 export async function listRunRecords(runId: string): Promise<IntegrationRecordResult[]> {

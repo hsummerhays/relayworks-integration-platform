@@ -8,6 +8,7 @@ public sealed class RelayWorksDbContext(DbContextOptions<RelayWorksDbContext> op
     public DbSet<IntegrationRun> IntegrationRuns => Set<IntegrationRun>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
     public DbSet<IntegrationRecordProjection> IntegrationRecordProjections => Set<IntegrationRecordProjection>();
+    public DbSet<ConnectionProfile> ConnectionProfiles => Set<ConnectionProfile>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -41,5 +42,14 @@ public sealed class RelayWorksDbContext(DbContextOptions<RelayWorksDbContext> op
         records.Property(x => x.ResolutionNotes).HasMaxLength(2000);
         records.HasIndex(x => new { x.RunId, x.SourceRecordId, x.SourceVersion }).IsUnique();
         records.HasIndex(x => new { x.TenantId, x.Status, x.UpdatedAtUtc });
+
+        var connections = modelBuilder.Entity<ConnectionProfile>();
+        connections.ToTable("ConnectionProfiles");
+        connections.HasKey(x => x.Id);
+        connections.Property(x => x.Name).HasMaxLength(160);
+        connections.Property(x => x.Provider).HasMaxLength(100);
+        connections.Property(x => x.SecretReference).HasMaxLength(300);
+        connections.Property(x => x.ConfigurationVersion).HasMaxLength(32);
+        connections.HasIndex(x => new { x.TenantId, x.Name }).IsUnique();
     }
 }

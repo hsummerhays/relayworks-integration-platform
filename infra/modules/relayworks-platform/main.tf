@@ -250,6 +250,12 @@ resource "azurerm_role_assignment" "worker_servicebus_receiver" {
   principal_id         = azurerm_user_assigned_identity.sync_worker.principal_id
 }
 
+resource "azurerm_role_assignment" "worker_key_vault_secrets" {
+  scope                = azurerm_key_vault.main.id
+  role_definition_name = "Key Vault Secrets User"
+  principal_id         = azurerm_user_assigned_identity.sync_worker.principal_id
+}
+
 resource "azurerm_container_app" "control_plane" {
   name                         = "ca-${local.name}-control"
   container_app_environment_id = azurerm_container_app_environment.main.id

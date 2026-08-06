@@ -47,6 +47,9 @@ public sealed class TimeEntryProcessor(
         CancellationToken cancellationToken)
     {
         var fingerprint = Fingerprint(entry);
+        var profile = command.ConnectorProfile ?? new ConnectorExecutionProfileV1(
+            "SimulatedAccounting", false, false, 0, "legacy-default", "none");
+        var destinationKey = $"{command.TenantId:N}:{command.ConnectionId:N}:{command.Operation}:{entry.SourceRecordId}:{entry.SourceVersion}";
         var existing = await dbContext.RecordDeliveries.SingleOrDefaultAsync(x =>
             x.TenantId == command.TenantId && x.ConnectionId == command.ConnectionId &&
             x.Operation == command.Operation && x.SourceRecordId == entry.SourceRecordId &&
@@ -64,8 +67,18 @@ public sealed class TimeEntryProcessor(
             }
 
             if (existing.State == RecordDeliveryState.Processing)
-                existing.Finish(RecordDeliveryState.UnknownOutcome, null, "INTERRUPTED_WRITE",
-                    "Processing was interrupted after the delivery gate was recorded; verify the destination before resolving.", now);
+            {
+                var lookup = profile.SupportsReadAfterWrite
+                    ? destinationConnector.FindByIdempotencyKey(destinationKey)
+                    : new DestinationLookupResult(false);
+                if (lookup.Found)
+                    existing.Finish(RecordDeliveryState.Succeeded, lookup.DestinationReference,
+                        "RECOVERED_AFTER_REDELIVERY",
+                        "A previously interrupted write was confirmed at the destination.", now);
+                else
+                    existing.Finish(RecordDeliveryState.UnknownOutcome, null, "INTERRUPTED_WRITE",
+                        "Processing was interrupted after the delivery gate was recorded; verify the destination before resolving.", now);
+            }
 
             // Terminal records are the durable idempotency gate: no second destination write.
             return Result(entry, existing.State, existing.DestinationReference,
@@ -78,11 +91,29 @@ public sealed class TimeEntryProcessor(
         dbContext.RecordDeliveries.Add(delivery);
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        var write = destinationConnector.Write(entry);
+        var write = destinationConnector.Write(entry, destinationKey);
+        var retries = 0;
+        while (write.Status == DestinationWriteStatus.ConfirmedNoCommit &&
+               retries < profile.MaxConfirmedNoCommitRetries)
+        {
+            retries++;
+            delivery.RecordAttempt(now);
+            write = destinationConnector.Write(entry, destinationKey);
+        }
+
+        if (write.Status == DestinationWriteStatus.UnknownOutcome && profile.SupportsReadAfterWrite)
+        {
+            var lookup = destinationConnector.FindByIdempotencyKey(destinationKey);
+            if (lookup.Found)
+                write = new DestinationWriteResult(DestinationWriteStatus.Succeeded,
+                    lookup.DestinationReference, "RECOVERED_BY_LOOKUP",
+                    "The ambiguous write was confirmed by read-after-write reconciliation.");
+        }
         var state = write.Status switch
         {
             DestinationWriteStatus.Succeeded => RecordDeliveryState.Succeeded,
             DestinationWriteStatus.Rejected => RecordDeliveryState.Rejected,
+            DestinationWriteStatus.ConfirmedNoCommit => RecordDeliveryState.RetryableFailure,
             DestinationWriteStatus.UnknownOutcome => RecordDeliveryState.UnknownOutcome,
             _ => throw new ArgumentOutOfRangeException()
         };

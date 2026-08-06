@@ -51,4 +51,10 @@ public sealed class RecordDelivery
         ErrorMessage = errorMessage;
         UpdatedAtUtc = now;
     }
+
+    public void RecordAttempt(DateTimeOffset now)
+    {
+        AttemptCount++;
+        UpdatedAtUtc = now;
+    }
 }

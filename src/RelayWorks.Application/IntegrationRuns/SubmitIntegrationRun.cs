@@ -10,7 +10,8 @@ public sealed record SubmitIntegrationRunCommand(
     Guid ConnectionId,
     IntegrationOperation Operation,
     string IdempotencyKey,
-    int TotalRecords);
+    int TotalRecords,
+    ConnectorExecutionProfileV1 ConnectorProfile);
 
 public sealed record SubmitIntegrationRunResult(IntegrationRunDto Run, bool IsDuplicate);
 
@@ -37,7 +38,8 @@ public sealed class SubmitIntegrationRunHandler(
             command.Operation,
             command.IdempotencyKey,
             command.TotalRecords,
-            timeProvider.GetUtcNow());
+            timeProvider.GetUtcNow(),
+            command.ConnectorProfile);
         var message = new IntegrationRunRequestedV1(
             Guid.NewGuid(),
             run.Id,

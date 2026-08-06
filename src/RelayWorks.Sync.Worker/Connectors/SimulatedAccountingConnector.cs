@@ -4,7 +4,9 @@ namespace RelayWorks.Sync.Worker;
 
 public sealed class SimulatedAccountingConnector : ITimeEntryDestinationConnector
 {
-    public DestinationWriteResult Write(CanonicalTimeEntryV1 entry)
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> Committed = [];
+
+    public DestinationWriteResult Write(CanonicalTimeEntryV1 entry, string idempotencyKey)
     {
         var errors = new List<string>();
         if (string.IsNullOrWhiteSpace(entry.EmployeeReference)) errors.Add("EMPLOYEE_REQUIRED");
@@ -17,11 +19,25 @@ public sealed class SimulatedAccountingConnector : ITimeEntryDestinationConnecto
 
         // The simulator makes explicit what a real connector must report: a timeout after
         // submission is not a failure and must not be retried without reconciliation.
+        if (entry.SourceRecordId.EndsWith("000013", StringComparison.Ordinal))
+            return new(DestinationWriteStatus.ConfirmedNoCommit, ErrorCode: "DESTINATION_UNAVAILABLE",
+                ErrorMessage: "The destination confirmed that no write was committed.");
+
         if (entry.SourceRecordId.EndsWith("000017", StringComparison.Ordinal))
+        {
+            var ambiguousReference = $"acct:{entry.TenantId:N}:{entry.SourceRecordId}:{entry.SourceVersion}";
+            Committed[idempotencyKey] = ambiguousReference;
             return new(DestinationWriteStatus.UnknownOutcome, ErrorCode: "DESTINATION_TIMEOUT",
                 ErrorMessage: "The destination did not confirm whether the write committed.");
+        }
 
-        return new(DestinationWriteStatus.Succeeded,
-            $"acct:{entry.TenantId:N}:{entry.SourceRecordId}:{entry.SourceVersion}");
+        var reference = $"acct:{entry.TenantId:N}:{entry.SourceRecordId}:{entry.SourceVersion}";
+        Committed[idempotencyKey] = reference;
+        return new(DestinationWriteStatus.Succeeded, reference);
     }
+
+    public DestinationLookupResult FindByIdempotencyKey(string idempotencyKey) =>
+        Committed.TryGetValue(idempotencyKey, out var reference)
+            ? new(true, reference)
+            : new(false);
 }

@@ -1,4 +1,4 @@
-import type { IntegrationRecordResult, IntegrationRun } from './types'
+import type { ConnectionProfile, IntegrationRecordResult, IntegrationRun } from './types'
 
 const tenantId = '5d963a18-c113-4bea-b2c7-c71a121e9f4b'
 
@@ -67,3 +67,10 @@ export const demoRecords: IntegrationRecordResult[] = [
     resolutionNotes: 'Project mapping corrected in source; included in the next run.', updatedAtUtc: '2026-08-06T15:51:00Z',
   },
 ]
+
+export const demoConnections: ConnectionProfile[] = [{
+  id: '857840a1-3440-431d-a696-07616926d50b', tenantId, name: 'FieldFlo → Accounting',
+  provider: 'SimulatedAccounting', supportsIdempotencyKey: true, supportsReadAfterWrite: true,
+  maxConfirmedNoCommitRetries: 2, secretReference: 'kv://relayworks/connections/fieldflo-accounting',
+  configurationVersion: '8d3fa8e2', isActive: true, updatedAtUtc: '2026-08-06T17:10:00Z',
+}]

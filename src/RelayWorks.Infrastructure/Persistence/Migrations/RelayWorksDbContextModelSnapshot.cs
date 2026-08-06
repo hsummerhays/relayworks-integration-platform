@@ -65,5 +65,23 @@ public sealed class RelayWorksDbContextModelSnapshot : ModelSnapshot
             entity.HasIndex("TenantId", "Status", "UpdatedAtUtc");
             entity.ToTable("IntegrationRecordProjections");
         });
+
+        modelBuilder.Entity("RelayWorks.Infrastructure.Persistence.ConnectionProfile", entity =>
+        {
+            entity.Property<Guid>("Id").ValueGeneratedNever().HasColumnType("uniqueidentifier");
+            entity.Property<string>("ConfigurationVersion").IsRequired().HasMaxLength(32).HasColumnType("nvarchar(32)");
+            entity.Property<bool>("IsActive").HasColumnType("bit");
+            entity.Property<int>("MaxConfirmedNoCommitRetries").HasColumnType("int");
+            entity.Property<string>("Name").IsRequired().HasMaxLength(160).HasColumnType("nvarchar(160)");
+            entity.Property<string>("Provider").IsRequired().HasMaxLength(100).HasColumnType("nvarchar(100)");
+            entity.Property<string>("SecretReference").IsRequired().HasMaxLength(300).HasColumnType("nvarchar(300)");
+            entity.Property<bool>("SupportsIdempotencyKey").HasColumnType("bit");
+            entity.Property<bool>("SupportsReadAfterWrite").HasColumnType("bit");
+            entity.Property<Guid>("TenantId").HasColumnType("uniqueidentifier");
+            entity.Property<DateTimeOffset>("UpdatedAtUtc").HasColumnType("datetimeoffset");
+            entity.HasKey("Id");
+            entity.HasIndex("TenantId", "Name").IsUnique();
+            entity.ToTable("ConnectionProfiles");
+        });
     }
 }

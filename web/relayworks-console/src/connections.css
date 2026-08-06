@@ -1,0 +1,18 @@
+.connection-manager { margin-bottom: 22px; }
+.connection-manager summary { display: flex; align-items: center; justify-content: space-between; padding: 18px 24px; cursor: pointer; list-style: none; }
+.connection-manager summary::-webkit-details-marker { display: none; }
+.connection-manager summary strong, .connection-manager summary .eyebrow { display: block; }
+.connection-manager summary > span:last-child { color: var(--brand); font-size: 12px; }
+.connection-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; padding: 0 24px 24px; border-top: 1px solid var(--line); }
+.connection-card { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 18px; padding: 16px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface-2); }
+.connection-card strong, .connection-card small { display: block; }
+.connection-card small { margin-top: 5px; color: var(--muted); font-size: 11px; }
+.capabilities { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; }
+.capabilities span { padding: 4px 7px; border-radius: 12px; background: rgba(156,167,164,.1); color: var(--muted); font-size: 9px; font-weight: 800; }
+.capabilities span.enabled { background: rgba(113,213,154,.12); color: var(--green); }
+.connection-form { grid-column: 1/-1; display: grid; grid-template-columns: 1fr 1fr 1.3fr auto auto 100px auto; align-items: end; gap: 10px; padding-top: 16px; }
+.check { display: flex; align-items: center; gap: 7px; padding-bottom: 11px; white-space: nowrap; }
+.check input { width: auto; }
+.connection-form .primary-button { margin: 0; }
+@media (max-width: 1050px) { .connection-grid { grid-template-columns: 1fr; } .connection-form { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 650px) { .connection-form { grid-template-columns: 1fr; } .connection-card { align-items: flex-start; flex-direction: column; } .capabilities { justify-content: flex-start; } }

@@ -8,6 +8,27 @@ namespace RelayWorks.Sync.Worker.Tests;
 public sealed class TimeEntryProcessorTests
 {
     [Fact]
+    public async Task Read_after_write_recovers_an_ambiguous_committed_record()
+    {
+        var options = new DbContextOptionsBuilder<WorkerLedgerDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
+        await using var db = new WorkerLedgerDbContext(options);
+        var processor = new TimeEntryProcessor(new SimulatedFieldOperationsConnector(),
+            new SimulatedAccountingConnector(), db);
+        var now = DateTimeOffset.Parse("2026-08-06T12:00:00Z");
+        var command = new IntegrationRunRequestedV1(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
+            Guid.NewGuid(), "TimeEntryExport", 17, now,
+            new ConnectorExecutionProfileV1("SimulatedAccounting", true, true, 2, "test-v1", "kv://test"));
+
+        var result = await processor.ProcessAsync(command, now.AddMinutes(1), default);
+        var recovered = await db.RecordDeliveries.SingleAsync(x => x.SourceRecordId == "time-000017");
+
+        Assert.Equal(15, result.AcceptedRecords);
+        Assert.Equal(RecordDeliveryState.Succeeded, recovered.State);
+        Assert.NotNull(recovered.DestinationReference);
+    }
+
+    [Fact]
     public async Task Redelivered_command_does_not_write_destination_twice()
     {
         var options = new DbContextOptionsBuilder<WorkerLedgerDbContext>()
@@ -29,10 +50,11 @@ public sealed class TimeEntryProcessorTests
     private sealed class CountingDestination : ITimeEntryDestinationConnector
     {
         public int Writes { get; private set; }
-        public DestinationWriteResult Write(RelayWorks.Contracts.TimeEntries.CanonicalTimeEntryV1 entry)
+        public DestinationWriteResult Write(RelayWorks.Contracts.TimeEntries.CanonicalTimeEntryV1 entry, string idempotencyKey)
         {
             Writes++;
             return new(DestinationWriteStatus.Succeeded, $"destination:{entry.SourceRecordId}");
         }
+        public DestinationLookupResult FindByIdempotencyKey(string idempotencyKey) => new(false);
     }
 }
