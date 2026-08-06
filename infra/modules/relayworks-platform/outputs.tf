@@ -21,3 +21,13 @@ output "sql_server_fqdn" {
 output "worker_ledger_database" {
   value = azurerm_mssql_database.worker_ledger.name
 }
+
+output "console_auth_build_settings" {
+  value = {
+    VITE_AUTH_ENABLED    = "true"
+    VITE_ENTRA_TENANT_ID = var.tenant_id
+    VITE_ENTRA_CLIENT_ID = var.console_client_id
+    VITE_API_SCOPE       = "api://${var.control_plane_api_client_id}/access_as_user"
+    VITE_API_BASE_URL    = "https://${azurerm_container_app.control_plane.ingress[0].fqdn}"
+  }
+}

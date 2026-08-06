@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@azure/msal-browser": "^4.30.0",
     "vue": "^3.5.18"
   },
   "devDependencies": {

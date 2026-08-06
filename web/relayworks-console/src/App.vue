@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { createConnection, getConnectionTest, getLatestConnectionTest, listConnections, listIntegrationRuns, listRunRecords, resolveIssue, startConnectionTest, submitIntegrationRun } from './api'
 import { demoConnections, demoRecords, demoRuns } from './demoData'
 import type { ConnectionProfile, ConnectionTest, CreateConnectionProfileRequest, IntegrationRecordResult, IntegrationRun, SubmitIntegrationRunRequest } from './types'
+import { authState, hasRole, initializeAuth, signIn, signOut } from './auth'
 
 const runs = ref<IntegrationRun[]>([])
 const records = ref<IntegrationRecordResult[]>([])
@@ -18,13 +19,12 @@ const theme = ref(localStorage.getItem('relayworks-theme') ?? 'dark')
 const resolutionNotes = reactive<Record<string, string>>({})
 const connectionTests = reactive<Record<string, ConnectionTest>>({})
 const connectionForm = reactive<CreateConnectionProfileRequest>({
-  id: crypto.randomUUID(), tenantId: '5d963a18-c113-4bea-b2c7-c71a121e9f4b', name: '',
+  id: crypto.randomUUID(), name: '',
   provider: 'FieldFloAccounting', supportsIdempotencyKey: true, supportsReadAfterWrite: true,
   maxConfirmedNoCommitRetries: 2, secretReference: '',
 })
 
 const form = reactive<SubmitIntegrationRunRequest>({
-  tenantId: '5d963a18-c113-4bea-b2c7-c71a121e9f4b',
   connectionId: '857840a1-3440-431d-a696-07616926d50b',
   operation: 'TimeEntryExport', idempotencyKey: '', totalRecords: 1,
 })
@@ -37,6 +37,8 @@ const selectedRun = computed(() => runs.value.find(r => r.id === selectedRunId.v
 const filteredRecords = computed(() => records.value.filter(record =>
   filter.value === 'all' || (filter.value === 'attention' && ['Rejected', 'UnknownOutcome'].includes(record.status)) ||
   (filter.value === 'resolved' && record.status === 'ManuallyResolved')))
+const canAdmin = computed(() => hasRole('Integration.Admin'))
+const canOperate = computed(() => canAdmin.value || hasRole('Integration.Operator'))
 
 function formatStatus(value: string) { return value.replace(/([a-z])([A-Z])/g, '$1 $2') }
 function formatDate(value: string) { return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(value)) }
@@ -45,7 +47,10 @@ async function refreshRuns() {
   loading.value = true
   try {
     runs.value = await listIntegrationRuns(); apiUnavailable.value = false
-  } catch { runs.value = demoRuns; apiUnavailable.value = true }
+  } catch {
+    if (authState.enabled) { runs.value = []; message.value = 'Unable to load authorized integration data.' }
+    else { runs.value = demoRuns; apiUnavailable.value = true }
+  }
   finally {
     loading.value = false
     if (!selectedRunId.value && runs.value.length) selectedRunId.value = runs.value[0].id
@@ -54,12 +59,15 @@ async function refreshRuns() {
 
 async function loadConnections() {
   try {
-    connections.value = await listConnections(form.tenantId)
+    connections.value = await listConnections()
     await Promise.all(connections.value.map(async connection => {
       const latest = await getLatestConnectionTest(connection.id); if (latest) connectionTests[connection.id] = latest
     }))
   }
-  catch { connections.value = demoConnections }
+  catch {
+    if (authState.enabled) { connections.value = []; message.value = 'Unable to load authorized connections.' }
+    else connections.value = demoConnections
+  }
 }
 
 async function saveConnection() {
@@ -68,6 +76,10 @@ async function saveConnection() {
     connections.value.push(created); form.connectionId = created.id
     connectionForm.id = crypto.randomUUID(); connectionForm.name = ''; connectionForm.secretReference = ''
   } catch (error) { message.value = error instanceof Error ? error.message : 'Unable to save connection.' }
+}
+async function signInAndLoad() {
+  try { await signIn(); if (authState.authenticated) await Promise.all([refreshRuns(), loadConnections()]) }
+  catch { authState.error = 'Microsoft sign-in did not complete. Please try again.' }
 }
 
 const wait = (milliseconds: number) => new Promise(resolve => window.setTimeout(resolve, milliseconds))
@@ -92,7 +104,7 @@ async function loadRecords(runId: string) {
   if (!runId) return
   recordsLoading.value = true
   try { records.value = await listRunRecords(runId) }
-  catch { records.value = demoRecords.filter(r => r.runId === runId) }
+  catch { records.value = authState.enabled ? [] : demoRecords.filter(r => r.runId === runId) }
   finally { recordsLoading.value = false }
 }
 
@@ -124,17 +136,23 @@ function toggleTheme() {
 }
 
 watch(selectedRunId, loadRecords)
-onMounted(async () => { await Promise.all([refreshRuns(), loadConnections()]) })
+onMounted(async () => {
+  await initializeAuth()
+  if (!authState.authenticated) return
+  await Promise.all([refreshRuns(), loadConnections()])
+})
 </script>
 
 <template>
   <div class="app-shell" :data-theme="theme">
-    <header class="topbar">
+    <div v-if="!authState.ready" class="auth-gate"><span class="brand-mark">RW</span><p>Establishing secure session…</p></div>
+    <div v-else-if="!authState.authenticated" class="auth-gate"><span class="brand-mark">RW</span><h1>RelayWorks</h1><p>{{ authState.error || 'Sign in with your organization account to continue.' }}</p><button class="primary-button" @click="signInAndLoad">Sign in with Microsoft</button></div>
+    <header v-if="authState.authenticated" class="topbar">
       <a class="brand" href="#"><span class="brand-mark">RW</span><span><strong>RelayWorks</strong><small>Integration Operations</small></span></a>
-      <div class="top-actions"><div class="environment"><span></span> Reference environment</div><button class="icon-button" @click="toggleTheme">{{ theme === 'dark' ? 'Light' : 'Dark' }} mode</button></div>
+      <div class="top-actions"><div class="identity"><strong>{{ authState.displayName }}</strong><small>Tenant {{ authState.tenantId.slice(0, 8) }}</small></div><div class="environment"><span></span> Reference environment</div><button class="icon-button" @click="toggleTheme">{{ theme === 'dark' ? 'Light' : 'Dark' }} mode</button><button class="icon-button" @click="signOut">Sign out</button></div>
     </header>
 
-    <main>
+    <main v-if="authState.authenticated">
       <section class="hero"><div><p class="eyebrow">Operations console</p><h1>Integration control room</h1><p>Trace every construction record, isolate uncertain writes, and reconcile exceptions without risking duplicate payroll or billing.</p></div><button class="secondary-button" :disabled="loading" @click="refreshRuns">{{ loading ? 'Refreshing…' : 'Refresh runs' }}</button></section>
       <div v-if="apiUnavailable" class="notice">API unavailable. Representative operations data is active.</div>
 
@@ -151,9 +169,9 @@ onMounted(async () => { await Promise.all([refreshRuns(), loadConnections()]) })
           <article v-for="connection in connections" :key="connection.id" class="connection-card">
             <div><strong>{{ connection.name }}</strong><small>{{ connection.provider }} · {{ connection.configurationVersion.slice(0, 8) }}</small><small v-if="connectionTests[connection.id]" class="test-result" :data-status="connectionTests[connection.id].status">{{ formatStatus(connectionTests[connection.id].status) }}<template v-if="connectionTests[connection.id].safeMessage"> · {{ connectionTests[connection.id].safeMessage }}</template><template v-if="connectionTests[connection.id].completedAtUtc"> · {{ formatDate(connectionTests[connection.id].completedAtUtc!) }}<template v-if="connectionTests[connection.id].durationMilliseconds"> ({{ connectionTests[connection.id].durationMilliseconds }} ms)</template></template></small></div>
             <div class="capabilities"><span class="enabled">Credential configured</span><span :class="{ enabled: connection.supportsIdempotencyKey }">Idempotency key</span><span :class="{ enabled: connection.supportsReadAfterWrite }">Read after write</span><span>{{ connection.maxConfirmedNoCommitRetries }} safe retries</span></div>
-            <button class="secondary-button test-button" :disabled="connectionTests[connection.id]?.status === 'Pending'" @click="testConnection(connection)">{{ connectionTests[connection.id]?.status === 'Pending' ? 'Testing…' : 'Test connection' }}</button>
+            <button class="secondary-button test-button" :disabled="!canOperate || connectionTests[connection.id]?.status === 'Pending'" @click="testConnection(connection)">{{ connectionTests[connection.id]?.status === 'Pending' ? 'Testing…' : 'Test connection' }}</button>
           </article>
-          <form class="connection-form" @submit.prevent="saveConnection">
+          <form v-if="canAdmin" class="connection-form" @submit.prevent="saveConnection">
             <label>Connection name<input v-model.trim="connectionForm.name" required placeholder="FieldFlo → Sage 100" /></label>
             <label>Provider<input v-model.trim="connectionForm.provider" required /></label>
             <label>Key Vault secret URI<input v-model.trim="connectionForm.secretReference" required placeholder="https://vault.vault.azure.net/secrets/customer" /></label>
@@ -189,7 +207,7 @@ onMounted(async () => { await Promise.all([refreshRuns(), loadConnections()]) })
                 <div class="issue-body"><div class="issue-title"><strong>{{ record.sourceRecordId }}</strong><span class="status" :data-status="record.status">{{ formatStatus(record.status) }}</span></div>
                   <p>{{ record.errorMessage || record.resolutionNotes || 'Delivered successfully.' }}</p>
                   <small>{{ record.employeeReference }} · {{ record.projectReference || 'Project missing' }} · version {{ record.sourceVersion }}</small>
-                  <div v-if="['Rejected','UnknownOutcome'].includes(record.status)" class="resolve-row"><input v-model="resolutionNotes[record.id]" placeholder="Document verification or corrective action" /><button class="primary-button" :disabled="!resolutionNotes[record.id]?.trim()" @click="markResolved(record)">Mark resolved</button></div>
+                  <div v-if="canOperate && ['Rejected','UnknownOutcome'].includes(record.status)" class="resolve-row"><input v-model="resolutionNotes[record.id]" placeholder="Document verification or corrective action" /><button class="primary-button" :disabled="!resolutionNotes[record.id]?.trim()" @click="markResolved(record)">Mark resolved</button></div>
                 </div>
               </article>
             </div>
@@ -197,7 +215,7 @@ onMounted(async () => { await Promise.all([refreshRuns(), loadConnections()]) })
         </div>
 
         <aside class="panel submit-panel"><p class="eyebrow">New work</p><h2>Submit a run</h2><p>Create an idempotent time-entry export for a configured connection.</p>
-          <form @submit.prevent="submitRun"><label>Tenant ID<input v-model.trim="form.tenantId" required /></label><label>Connection ID<input v-model.trim="form.connectionId" required /></label><label>Operation<input value="Time entry export" disabled /></label><label>Idempotency key<input v-model.trim="form.idempotencyKey" required placeholder="customer-records-date" /></label><label>Record count<input v-model.number="form.totalRecords" required type="number" min="1" /></label><button class="primary-button" :disabled="submitting || apiUnavailable">{{ submitting ? 'Submitting…' : 'Submit integration run' }}</button></form>
+          <form @submit.prevent="submitRun"><label>Authenticated tenant<input :value="authState.tenantId" disabled /></label><label>Connection ID<input v-model.trim="form.connectionId" required /></label><label>Operation<input value="Time entry export" disabled /></label><label>Idempotency key<input v-model.trim="form.idempotencyKey" required placeholder="customer-records-date" /></label><label>Record count<input v-model.number="form.totalRecords" required type="number" min="1" /></label><button class="primary-button" :disabled="submitting || apiUnavailable || !canOperate">{{ submitting ? 'Submitting…' : 'Submit integration run' }}</button></form>
           <p v-if="message" class="form-message">{{ message }}</p><small v-if="apiUnavailable" class="form-hint">Start the API to enable submissions.</small>
         </aside>
       </section>

@@ -22,7 +22,6 @@ export interface IntegrationRun {
 }
 
 export interface SubmitIntegrationRunRequest {
-  tenantId: string
   connectionId: string
   operation: IntegrationOperation
   idempotencyKey: string
@@ -67,7 +66,7 @@ export interface ConnectionProfile {
   updatedAtUtc: string
 }
 
-export type CreateConnectionProfileRequest = Omit<ConnectionProfile, 'configurationVersion' | 'isActive' | 'updatedAtUtc'>
+export type CreateConnectionProfileRequest = Omit<ConnectionProfile, 'tenantId' | 'configurationVersion' | 'isActive' | 'updatedAtUtc'>
 
 export type ConnectionTestStatus = 'Pending' | 'Succeeded' | 'Failed' | 'TimedOut' | 'Canceled'
 export interface ConnectionTest {

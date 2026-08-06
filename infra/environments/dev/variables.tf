@@ -31,3 +31,7 @@ variable "control_plane_api_client_id" {
   type = string
   description = "Entra app registration client id for the Control Plane API."
 }
+variable "console_client_id" {
+  type = string
+  description = "Entra single-page application client id for the Vue console."
+}

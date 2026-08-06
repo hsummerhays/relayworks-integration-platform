@@ -9,6 +9,10 @@
 
 The shared `RelayWorks.Contracts` assembly contains versioned messages and canonical transfer contracts only.
 
+## Identity boundary
+
+The Vue console acquires a delegated Control Plane token with MSAL. The API requires a signed `relayworks_tenant_id` claim before tenant-scoped handlers execute and applies `Integration.Operator` or `Integration.Admin` app-role policies to mutations. Tenant identifiers are absent from mutation DTOs; the authenticated context supplies them. Development bypass is explicit and fixed to one configured tenant.
+
 ## Record-safe time-entry flow
 
 ```mermaid

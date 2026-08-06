@@ -29,9 +29,26 @@ var authenticationEnabled = builder.Configuration.GetValue("Authentication:Enabl
 if (authenticationEnabled)
 {
     builder.Services.AddAuthentication().AddMicrosoftIdentityWebApi(builder.Configuration.GetSection("AzureAd"));
-    builder.Services.AddAuthorization(options => options.FallbackPolicy =
-        new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());
 }
+builder.Services.AddAuthorization(options =>
+{
+    options.FallbackPolicy = authenticationEnabled
+        ? new AuthorizationPolicyBuilder().RequireAuthenticatedUser().RequireClaim("relayworks_tenant_id").Build()
+        : new AuthorizationPolicyBuilder().RequireAssertion(_ => true).Build();
+    options.AddPolicy("IntegrationOperator", policy =>
+    {
+        if (authenticationEnabled) { policy.RequireAuthenticatedUser(); policy.RequireClaim("relayworks_tenant_id"); }
+        policy.RequireAssertion(context => !authenticationEnabled || context.User.IsInRole("Integration.Operator") ||
+            context.User.IsInRole("Integration.Admin") || context.User.HasClaim("roles", "Integration.Operator") ||
+            context.User.HasClaim("roles", "Integration.Admin"));
+    });
+    options.AddPolicy("IntegrationAdmin", policy =>
+    {
+        if (authenticationEnabled) { policy.RequireAuthenticatedUser(); policy.RequireClaim("relayworks_tenant_id"); }
+        policy.RequireAssertion(context => !authenticationEnabled || context.User.IsInRole("Integration.Admin") ||
+            context.User.HasClaim("roles", "Integration.Admin"));
+    });
+});
 builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
@@ -57,7 +74,7 @@ app.UseCors();
 app.UseHttpsRedirection();
 if (authenticationEnabled) { app.UseAuthentication(); app.UseAuthorization(); }
 
-var runs = app.MapGroup("/api/integration-runs").WithTags("Integration Runs");
+var runs = app.MapGroup("/api/integration-runs").WithTags("Integration Runs").RequireAuthorization();
 runs.MapGet("/", async (
     TenantContext tenantContext,
     ListIntegrationRunsHandler handler,
@@ -73,14 +90,14 @@ runs.MapPost("/", async (
 {
     try
     {
-        if (request.TenantId != tenantContext.RequireTenantId()) return Results.Forbid();
+        var tenantId = tenantContext.RequireTenantId();
         var connection = await db.ConnectionProfiles.AsNoTracking().SingleOrDefaultAsync(x =>
-            x.Id == request.ConnectionId && x.TenantId == request.TenantId && x.IsActive, cancellationToken);
+            x.Id == request.ConnectionId && x.TenantId == tenantId && x.IsActive, cancellationToken);
         if (connection is null) return Results.ValidationProblem(new Dictionary<string, string[]>
         { ["connectionId"] = ["An active connection profile is required for this tenant."] });
         var result = await handler.HandleAsync(
             new SubmitIntegrationRunCommand(
-                request.TenantId,
+                tenantId,
                 request.ConnectionId,
                 request.Operation,
                 request.IdempotencyKey,
@@ -99,9 +116,9 @@ runs.MapPost("/", async (
             [exception.ParamName ?? "request"] = [exception.Message]
         });
     }
-});
+}).RequireAuthorization("IntegrationOperator");
 
-var connections = app.MapGroup("/api/connections").WithTags("Connections");
+var connections = app.MapGroup("/api/connections").WithTags("Connections").RequireAuthorization();
 connections.MapGet("/", async (RelayWorksDbContext db, TenantContext tenantContext, CancellationToken cancellationToken) =>
     Results.Ok(await db.ConnectionProfiles.AsNoTracking().Where(x => x.TenantId == tenantContext.RequireTenantId())
         .OrderBy(x => x.Name).ToListAsync(cancellationToken)));
@@ -110,8 +127,8 @@ connections.MapPost("/", async (CreateConnectionProfileRequest request, RelayWor
 {
     try
     {
-        if (request.TenantId != tenantContext.RequireTenantId()) return Results.Forbid();
-        var profile = ConnectionProfile.Create(request.Id, request.TenantId, request.Name, request.Provider,
+        var tenantId = tenantContext.RequireTenantId();
+        var profile = ConnectionProfile.Create(request.Id, tenantId, request.Name, request.Provider,
             request.SupportsIdempotencyKey, request.SupportsReadAfterWrite,
             request.MaxConfirmedNoCommitRetries, request.SecretReference, timeProvider.GetUtcNow());
         db.ConnectionProfiles.Add(profile);
@@ -123,7 +140,7 @@ connections.MapPost("/", async (CreateConnectionProfileRequest request, RelayWor
     }
     catch (ArgumentException exception)
     { return Results.ValidationProblem(new Dictionary<string, string[]> { ["connection"] = [exception.Message] }); }
-});
+}).RequireAuthorization("IntegrationAdmin");
 
 connections.MapPost("/{connectionId:guid}/tests", async (Guid connectionId, RelayWorksDbContext db,
     TenantContext tenantContext, TimeProvider timeProvider, CancellationToken cancellationToken) =>
@@ -143,7 +160,7 @@ connections.MapPost("/{connectionId:guid}/tests", async (Guid connectionId, Rela
         Detail = connectionId.ToString(), OccurredAtUtc = now });
     await db.SaveChangesAsync(cancellationToken);
     return Results.Accepted($"/api/connections/{connectionId}/tests/{testId}", test);
-});
+}).RequireAuthorization("IntegrationOperator");
 
 connections.MapGet("/{connectionId:guid}/tests/{testId:guid}", async (Guid connectionId, Guid testId,
     RelayWorksDbContext db, TenantContext tenantContext, CancellationToken cancellationToken) =>
@@ -189,18 +206,17 @@ app.MapPost("/api/reconciliation-issues/{id:guid}/resolve", async (Guid id,
         Detail = request.ResolutionNotes.Trim(), OccurredAtUtc = timeProvider.GetUtcNow() });
     await db.SaveChangesAsync(cancellationToken);
     return Results.Ok(record);
-}).WithTags("Reconciliation");
+}).WithTags("Reconciliation").RequireAuthorization("IntegrationOperator");
 
 app.MapGet("/api/audit", async (RelayWorksDbContext db, TenantContext tenantContext, CancellationToken cancellationToken) =>
     Results.Ok(await db.OperatorAuditRecords.AsNoTracking()
         .Where(x => x.TenantId == tenantContext.RequireTenantId()).OrderByDescending(x => x.OccurredAtUtc)
-        .Take(200).ToListAsync(cancellationToken))).WithTags("Audit");
+        .Take(200).ToListAsync(cancellationToken))).WithTags("Audit").RequireAuthorization("IntegrationAdmin");
 
 app.MapGet("/health", () => Results.Ok(new { status = "healthy", service = "control-plane" })).AllowAnonymous();
 app.Run();
 
 public sealed record SubmitIntegrationRunRequest(
-    Guid TenantId,
     Guid ConnectionId,
     IntegrationOperation Operation,
     string IdempotencyKey,
@@ -208,6 +224,6 @@ public sealed record SubmitIntegrationRunRequest(
 
 public sealed record ResolveReconciliationIssueRequest(string ResolutionNotes);
 
-public sealed record CreateConnectionProfileRequest(Guid Id, Guid TenantId, string Name, string Provider,
+public sealed record CreateConnectionProfileRequest(Guid Id, string Name, string Provider,
     bool SupportsIdempotencyKey, bool SupportsReadAfterWrite, int MaxConfirmedNoCommitRetries,
     string SecretReference);

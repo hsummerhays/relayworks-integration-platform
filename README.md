@@ -1,6 +1,6 @@
 # RelayWorks Integration Platform
 
-RelayWorks is a .NET and Vue reference platform for reliable construction-system integrations. Iteration 7 adds durable asynchronous connection testing to the authenticated, record-safe, capability-aware platform.
+RelayWorks is a .NET and Vue reference platform for reliable construction-system integrations. Iteration 8 completes Entra-authenticated tenant and role enforcement across the API and Vue operations console.
 
 ## Implemented vertical slice
 
@@ -60,6 +60,7 @@ Both EF Core migration sets are intended to run from an approved deployment job.
 | Confirmed-no-commit retry and read-after-write recovery | Implemented with simulated connector |
 | Coalesced Key Vault cache and configurable vault routing | Implemented |
 | Worker-executed connection tests with durable polling | Implemented |
+| Entra SPA/API authentication and app-role authorization | Implemented; registrations not provisioned |
 | Terraform Azure environment | Implemented, not applied |
 | Real vendor connectors and identity/authz | Planned |
 | OpenTelemetry and automated ledger retention | Planned |

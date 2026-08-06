@@ -6,6 +6,10 @@ output "console_url" {
   value = module.relayworks.console_url
 }
 
+output "console_auth_build_settings" {
+  value = module.relayworks.console_auth_build_settings
+}
+
 output "container_registry_login_server" {
   value = module.relayworks.container_registry_login_server
 }

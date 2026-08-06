@@ -1,5 +1,15 @@
 # Changelog
 
+## Iteration 8 — 2026-08-06
+
+- Added MSAL browser authentication and silent API token acquisition to the Vue console.
+- Added interactive token recovery, sign-in/sign-out states, and authenticated operator/tenant display.
+- Removed tenant IDs from mutation request contracts; tenant scope now comes only from the signed access token.
+- Added `Integration.Operator` and `Integration.Admin` server authorization policies.
+- Restricted connection creation and audit history to administrators and operational mutations to operators.
+- Prevented authenticated API failures from falling back to representative demo data.
+- Added Terraform inputs and build outputs for the SPA client, API audience, tenant, and scope.
+
 ## Iteration 7 — 2026-08-06
 
 - Added durable asynchronous connection-test requests and terminal result projections.

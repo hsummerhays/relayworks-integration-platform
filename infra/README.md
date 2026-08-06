@@ -36,3 +36,5 @@ Implemented in Terraform:
 - Key Vault, Log Analytics, and Application Insights.
 
 GitHub workload-identity federation is documented but not provisioned because its subject depends on the final GitHub organization and repository name.
+
+The Entra API and SPA app registrations are organization-owned prerequisites. Terraform accepts their client IDs and exports `console_auth_build_settings`; CI injects those values during the Vite build. App roles and the RelayWorks tenant claim are configured according to `docs/entra-setup.md`.
