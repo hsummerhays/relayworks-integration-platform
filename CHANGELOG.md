@@ -1,5 +1,14 @@
 # Changelog
 
+## Iteration 7 — 2026-08-06
+
+- Added durable asynchronous connection-test requests and terminal result projections.
+- Saved connection-test state, command outbox, and operator audit in one Control Plane transaction.
+- Executed tests in the Worker through the real cached-secret and connector-construction path.
+- Added a 30-second Worker timeout and sanitized credential, provider, network, and configuration failure categories.
+- Added idempotent Worker inbox handling and result outbox publishing.
+- Added Vue polling every two seconds, local timeout behavior, persisted latest-result reload, and premium status treatment.
+
 ## Iteration 6 — 2026-08-06
 
 - Added Microsoft Entra ID bearer authentication with a secure fallback authorization policy.

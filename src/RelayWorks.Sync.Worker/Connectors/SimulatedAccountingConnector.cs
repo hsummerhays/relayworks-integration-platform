@@ -40,4 +40,10 @@ public sealed class SimulatedAccountingConnector : ITimeEntryDestinationConnecto
         Committed.TryGetValue(idempotencyKey, out var reference)
             ? new(true, reference)
             : new(false);
+
+    public async Task<ConnectorHealthResult> TestConnectionAsync(CancellationToken cancellationToken)
+    {
+        await Task.Delay(150, cancellationToken);
+        return new(true, SafeMessage: "Authentication and provider reachability confirmed.");
+    }
 }

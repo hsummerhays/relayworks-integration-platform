@@ -7,6 +7,7 @@ using RelayWorks.Application.Abstractions;
 using RelayWorks.Contracts.IntegrationRuns;
 using Microsoft.EntityFrameworkCore;
 using RelayWorks.Infrastructure.Persistence;
+using RelayWorks.Contracts.Connections;
 
 namespace RelayWorks.Infrastructure.Messaging;
 
@@ -39,6 +40,27 @@ public sealed class IntegrationResultConsumer(
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var repository = scope.ServiceProvider.GetRequiredService<IIntegrationRunRepository>();
+
+        if (args.Message.Subject == nameof(ConnectionTestCompletedV1))
+        {
+            var result = args.Message.Body.ToObjectFromJson<ConnectionTestCompletedV1>()
+                ?? throw new InvalidOperationException("Connection test result payload was empty.");
+            var db = scope.ServiceProvider.GetRequiredService<RelayWorksDbContext>();
+            var test = await db.ConnectionTests.SingleOrDefaultAsync(x => x.Id == result.TestId &&
+                x.TenantId == result.TenantId, args.CancellationToken);
+            if (test is null)
+            {
+                await args.DeadLetterMessageAsync(args.Message, "UnknownConnectionTest", cancellationToken: args.CancellationToken);
+                return;
+            }
+            test.Complete(result.Status, result.FailureCategory, result.SafeMessage, result.Duration, result.OccurredAtUtc);
+            db.OperatorAuditRecords.Add(new OperatorAuditRecord { TenantId = result.TenantId,
+                ActorId = "sync-worker", Action = "ConnectionTestCompleted", ResourceType = "ConnectionTest",
+                ResourceId = result.TestId.ToString(), Detail = result.Status, OccurredAtUtc = result.OccurredAtUtc });
+            await db.SaveChangesAsync(args.CancellationToken);
+            await args.CompleteMessageAsync(args.Message, args.CancellationToken);
+            return;
+        }
 
         if (args.Message.Subject == nameof(IntegrationRecordResultsReportedV1))
         {

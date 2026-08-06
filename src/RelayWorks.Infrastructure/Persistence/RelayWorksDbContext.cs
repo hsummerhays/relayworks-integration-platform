@@ -10,6 +10,7 @@ public sealed class RelayWorksDbContext(DbContextOptions<RelayWorksDbContext> op
     public DbSet<IntegrationRecordProjection> IntegrationRecordProjections => Set<IntegrationRecordProjection>();
     public DbSet<ConnectionProfile> ConnectionProfiles => Set<ConnectionProfile>();
     public DbSet<OperatorAuditRecord> OperatorAuditRecords => Set<OperatorAuditRecord>();
+    public DbSet<ConnectionTest> ConnectionTests => Set<ConnectionTest>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -59,5 +60,10 @@ public sealed class RelayWorksDbContext(DbContextOptions<RelayWorksDbContext> op
         audit.Property(x => x.ResourceType).HasMaxLength(100); audit.Property(x => x.ResourceId).HasMaxLength(200);
         audit.Property(x => x.Detail).HasMaxLength(2000);
         audit.HasIndex(x => new { x.TenantId, x.OccurredAtUtc });
+
+        var tests = modelBuilder.Entity<ConnectionTest>(); tests.ToTable("ConnectionTests"); tests.HasKey(x => x.Id);
+        tests.Property(x => x.ConfigurationVersion).HasMaxLength(32); tests.Property(x => x.Status).HasMaxLength(30);
+        tests.Property(x => x.FailureCategory).HasMaxLength(80); tests.Property(x => x.SafeMessage).HasMaxLength(500);
+        tests.Property(x => x.RequestedBy).HasMaxLength(100); tests.HasIndex(x => new { x.TenantId, x.ConnectionId, x.RequestedAtUtc });
     }
 }

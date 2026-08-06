@@ -14,5 +14,10 @@
 .check { display: flex; align-items: center; gap: 7px; padding-bottom: 11px; white-space: nowrap; }
 .check input { width: auto; }
 .connection-form .primary-button { margin: 0; }
+.test-button { white-space: nowrap; }
+.test-result { max-width: 420px; margin-top: 8px !important; color: var(--brand) !important; }
+.test-result[data-status="Succeeded"] { color: var(--green) !important; }
+.test-result[data-status="Pending"] { color: var(--brand) !important; animation: pulse 2s infinite; }
+.test-result[data-status="Failed"], .test-result[data-status="TimedOut"] { color: var(--orange) !important; }
 @media (max-width: 1050px) { .connection-grid { grid-template-columns: 1fr; } .connection-form { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 650px) { .connection-form { grid-template-columns: 1fr; } .connection-card { align-items: flex-start; flex-direction: column; } .capabilities { justify-content: flex-start; } }

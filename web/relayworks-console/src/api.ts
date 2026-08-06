@@ -5,6 +5,7 @@ import type {
   IntegrationRecordResult,
   ConnectionProfile,
   CreateConnectionProfileRequest,
+  ConnectionTest,
 } from './types'
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5080'
@@ -14,6 +15,21 @@ async function ensureSuccess(response: Response): Promise<Response> {
 
   const detail = await response.text()
   throw new Error(detail || `Request failed with status ${response.status}`)
+}
+
+export async function startConnectionTest(connectionId: string): Promise<ConnectionTest> {
+  const response = await ensureSuccess(await fetch(`${apiBaseUrl}/api/connections/${connectionId}/tests`, { method: 'POST' }))
+  return response.json() as Promise<ConnectionTest>
+}
+
+export async function getConnectionTest(connectionId: string, testId: string): Promise<ConnectionTest> {
+  const response = await ensureSuccess(await fetch(`${apiBaseUrl}/api/connections/${connectionId}/tests/${testId}`))
+  return response.json() as Promise<ConnectionTest>
+}
+export async function getLatestConnectionTest(connectionId: string): Promise<ConnectionTest | null> {
+  const response = await fetch(`${apiBaseUrl}/api/connections/${connectionId}/tests/latest`)
+  if (response.status === 404) return null
+  return ensureSuccess(response).then(value => value.json() as Promise<ConnectionTest>)
 }
 
 export async function listConnections(tenantId: string): Promise<ConnectionProfile[]> {

@@ -68,3 +68,10 @@ export interface ConnectionProfile {
 }
 
 export type CreateConnectionProfileRequest = Omit<ConnectionProfile, 'configurationVersion' | 'isActive' | 'updatedAtUtc'>
+
+export type ConnectionTestStatus = 'Pending' | 'Succeeded' | 'Failed' | 'TimedOut' | 'Canceled'
+export interface ConnectionTest {
+  id: string; tenantId: string; connectionId: string; configurationVersion: string
+  status: ConnectionTestStatus; failureCategory: string | null; safeMessage: string | null
+  requestedBy: string; requestedAtUtc: string; completedAtUtc: string | null; durationMilliseconds: number | null
+}

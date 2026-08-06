@@ -83,5 +83,34 @@ public sealed class RelayWorksDbContextModelSnapshot : ModelSnapshot
             entity.HasIndex("TenantId", "Name").IsUnique();
             entity.ToTable("ConnectionProfiles");
         });
+
+        modelBuilder.Entity("RelayWorks.Infrastructure.Persistence.OperatorAuditRecord", entity =>
+        {
+            entity.Property<Guid>("Id").ValueGeneratedNever().HasColumnType("uniqueidentifier");
+            entity.Property<string>("Action").IsRequired().HasMaxLength(100).HasColumnType("nvarchar(100)");
+            entity.Property<string>("ActorId").IsRequired().HasMaxLength(100).HasColumnType("nvarchar(100)");
+            entity.Property<string>("Detail").IsRequired().HasMaxLength(2000).HasColumnType("nvarchar(2000)");
+            entity.Property<DateTimeOffset>("OccurredAtUtc").HasColumnType("datetimeoffset");
+            entity.Property<string>("ResourceId").IsRequired().HasMaxLength(200).HasColumnType("nvarchar(200)");
+            entity.Property<string>("ResourceType").IsRequired().HasMaxLength(100).HasColumnType("nvarchar(100)");
+            entity.Property<Guid>("TenantId").HasColumnType("uniqueidentifier"); entity.HasKey("Id");
+            entity.HasIndex("TenantId", "OccurredAtUtc"); entity.ToTable("OperatorAuditRecords");
+        });
+
+        modelBuilder.Entity("RelayWorks.Infrastructure.Persistence.ConnectionTest", entity =>
+        {
+            entity.Property<Guid>("Id").ValueGeneratedNever().HasColumnType("uniqueidentifier");
+            entity.Property<Guid>("ConnectionId").HasColumnType("uniqueidentifier");
+            entity.Property<string>("ConfigurationVersion").IsRequired().HasMaxLength(32).HasColumnType("nvarchar(32)");
+            entity.Property<DateTimeOffset?>("CompletedAtUtc").HasColumnType("datetimeoffset");
+            entity.Property<long?>("DurationMilliseconds").HasColumnType("bigint");
+            entity.Property<string>("FailureCategory").HasMaxLength(80).HasColumnType("nvarchar(80)");
+            entity.Property<DateTimeOffset>("RequestedAtUtc").HasColumnType("datetimeoffset");
+            entity.Property<string>("RequestedBy").IsRequired().HasMaxLength(100).HasColumnType("nvarchar(100)");
+            entity.Property<string>("SafeMessage").HasMaxLength(500).HasColumnType("nvarchar(500)");
+            entity.Property<string>("Status").IsRequired().HasMaxLength(30).HasColumnType("nvarchar(30)");
+            entity.Property<Guid>("TenantId").HasColumnType("uniqueidentifier"); entity.HasKey("Id");
+            entity.HasIndex("TenantId", "ConnectionId", "RequestedAtUtc"); entity.ToTable("ConnectionTests");
+        });
     }
 }

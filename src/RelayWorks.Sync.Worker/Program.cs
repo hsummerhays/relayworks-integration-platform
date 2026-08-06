@@ -13,6 +13,7 @@ builder.Services.AddSingleton(provider =>
 builder.Services.AddDbContext<WorkerLedgerDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("WorkerLedger")));
 builder.Services.AddScoped<TimeEntryProcessor>();
+builder.Services.AddScoped<ConnectionTestProcessor>();
 builder.Services.AddScoped<ITimeEntrySourceConnector, SimulatedFieldOperationsConnector>();
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<ISecretValueProvider, KeyVaultSecretValueProvider>();

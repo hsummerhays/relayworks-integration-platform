@@ -6,6 +6,7 @@ public interface ITimeEntryDestinationConnector
 {
     DestinationWriteResult Write(CanonicalTimeEntryV1 entry, string idempotencyKey);
     DestinationLookupResult FindByIdempotencyKey(string idempotencyKey);
+    Task<ConnectorHealthResult> TestConnectionAsync(CancellationToken cancellationToken);
 }
 
 public enum DestinationWriteStatus { Succeeded, Rejected, ConfirmedNoCommit, UnknownOutcome }
@@ -17,3 +18,4 @@ public sealed record DestinationWriteResult(
     string? ErrorMessage = null);
 
 public sealed record DestinationLookupResult(bool Found, string? DestinationReference = null);
+public sealed record ConnectorHealthResult(bool Succeeded, string? FailureCategory = null, string? SafeMessage = null);

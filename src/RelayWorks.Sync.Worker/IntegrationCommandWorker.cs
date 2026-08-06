@@ -1,6 +1,7 @@
 using Azure.Messaging.ServiceBus;
 using Microsoft.Extensions.Options;
 using RelayWorks.Contracts.IntegrationRuns;
+using RelayWorks.Contracts.Connections;
 
 namespace RelayWorks.Sync.Worker;
 
@@ -33,6 +34,18 @@ public sealed class IntegrationCommandWorker(
 
     private async Task ProcessMessageAsync(ProcessMessageEventArgs args)
     {
+        if (args.Message.Subject == nameof(ConnectionTestRequestedV1))
+        {
+            var command = args.Message.Body.ToObjectFromJson<ConnectionTestRequestedV1>()
+                ?? throw new InvalidOperationException("Connection test payload was empty.");
+            await using var testScope = scopeFactory.CreateAsyncScope();
+            await testScope.ServiceProvider.GetRequiredService<ConnectionTestProcessor>()
+                .ProcessAsync(command, args.CancellationToken);
+            await args.CompleteMessageAsync(args.Message, args.CancellationToken);
+            logger.LogInformation("Processed connection test {TestId}", command.TestId);
+            return;
+        }
+
         if (args.Message.Subject != nameof(IntegrationRunRequestedV1))
         {
             await args.DeadLetterMessageAsync(args.Message, "UnsupportedCommandType", cancellationToken: args.CancellationToken);

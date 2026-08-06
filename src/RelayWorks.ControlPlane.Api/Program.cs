@@ -10,6 +10,8 @@ using RelayWorks.Infrastructure.Persistence;
 using RelayWorks.ControlPlane.Api;
 using Microsoft.Identity.Web;
 using Microsoft.AspNetCore.Authorization;
+using System.Text.Json;
+using RelayWorks.Contracts.Connections;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -121,6 +123,43 @@ connections.MapPost("/", async (CreateConnectionProfileRequest request, RelayWor
     }
     catch (ArgumentException exception)
     { return Results.ValidationProblem(new Dictionary<string, string[]> { ["connection"] = [exception.Message] }); }
+});
+
+connections.MapPost("/{connectionId:guid}/tests", async (Guid connectionId, RelayWorksDbContext db,
+    TenantContext tenantContext, TimeProvider timeProvider, CancellationToken cancellationToken) =>
+{
+    var tenantId = tenantContext.RequireTenantId();
+    var connection = await db.ConnectionProfiles.AsNoTracking().SingleOrDefaultAsync(x =>
+        x.Id == connectionId && x.TenantId == tenantId && x.IsActive, cancellationToken);
+    if (connection is null) return Results.NotFound();
+    var now = timeProvider.GetUtcNow(); var testId = Guid.NewGuid(); var messageId = Guid.NewGuid();
+    var test = new ConnectionTest { Id = testId, TenantId = tenantId, ConnectionId = connectionId,
+        ConfigurationVersion = connection.ConfigurationVersion, RequestedBy = tenantContext.RequireActorId(), RequestedAtUtc = now };
+    var command = new ConnectionTestRequestedV1(messageId, testId, tenantId, connectionId, connection.Snapshot(), now);
+    db.ConnectionTests.Add(test);
+    db.OutboxMessages.Add(new OutboxMessage(messageId, nameof(ConnectionTestRequestedV1), JsonSerializer.Serialize(command), now));
+    db.OperatorAuditRecords.Add(new OperatorAuditRecord { TenantId = tenantId, ActorId = tenantContext.RequireActorId(),
+        Action = "ConnectionTestRequested", ResourceType = "ConnectionTest", ResourceId = testId.ToString(),
+        Detail = connectionId.ToString(), OccurredAtUtc = now });
+    await db.SaveChangesAsync(cancellationToken);
+    return Results.Accepted($"/api/connections/{connectionId}/tests/{testId}", test);
+});
+
+connections.MapGet("/{connectionId:guid}/tests/{testId:guid}", async (Guid connectionId, Guid testId,
+    RelayWorksDbContext db, TenantContext tenantContext, CancellationToken cancellationToken) =>
+{
+    var result = await db.ConnectionTests.AsNoTracking().SingleOrDefaultAsync(x => x.Id == testId &&
+        x.ConnectionId == connectionId && x.TenantId == tenantContext.RequireTenantId(), cancellationToken);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+});
+
+connections.MapGet("/{connectionId:guid}/tests/latest", async (Guid connectionId,
+    RelayWorksDbContext db, TenantContext tenantContext, CancellationToken cancellationToken) =>
+{
+    var result = await db.ConnectionTests.AsNoTracking().Where(x => x.ConnectionId == connectionId &&
+        x.TenantId == tenantContext.RequireTenantId()).OrderByDescending(x => x.RequestedAtUtc)
+        .FirstOrDefaultAsync(cancellationToken);
+    return result is null ? Results.NotFound() : Results.Ok(result);
 });
 
 runs.MapGet("/{runId:guid}/records", async (Guid runId, RelayWorksDbContext db, TenantContext tenantContext, CancellationToken cancellationToken) =>

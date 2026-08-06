@@ -60,6 +60,8 @@ public sealed class TimeEntryProcessorTests
             return new(DestinationWriteStatus.Succeeded, $"destination:{entry.SourceRecordId}");
         }
         public DestinationLookupResult FindByIdempotencyKey(string idempotencyKey) => new(false);
+        public Task<ConnectorHealthResult> TestConnectionAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(new ConnectorHealthResult(true));
     }
 
     private sealed class FixedConnectorFactory(ITimeEntryDestinationConnector connector)

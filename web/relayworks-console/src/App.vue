@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { createConnection, listConnections, listIntegrationRuns, listRunRecords, resolveIssue, submitIntegrationRun } from './api'
+import { createConnection, getConnectionTest, getLatestConnectionTest, listConnections, listIntegrationRuns, listRunRecords, resolveIssue, startConnectionTest, submitIntegrationRun } from './api'
 import { demoConnections, demoRecords, demoRuns } from './demoData'
-import type { ConnectionProfile, CreateConnectionProfileRequest, IntegrationRecordResult, IntegrationRun, SubmitIntegrationRunRequest } from './types'
+import type { ConnectionProfile, ConnectionTest, CreateConnectionProfileRequest, IntegrationRecordResult, IntegrationRun, SubmitIntegrationRunRequest } from './types'
 
 const runs = ref<IntegrationRun[]>([])
 const records = ref<IntegrationRecordResult[]>([])
@@ -16,6 +16,7 @@ const message = ref('')
 const filter = ref<'all' | 'attention' | 'resolved'>('attention')
 const theme = ref(localStorage.getItem('relayworks-theme') ?? 'dark')
 const resolutionNotes = reactive<Record<string, string>>({})
+const connectionTests = reactive<Record<string, ConnectionTest>>({})
 const connectionForm = reactive<CreateConnectionProfileRequest>({
   id: crypto.randomUUID(), tenantId: '5d963a18-c113-4bea-b2c7-c71a121e9f4b', name: '',
   provider: 'FieldFloAccounting', supportsIdempotencyKey: true, supportsReadAfterWrite: true,
@@ -52,7 +53,12 @@ async function refreshRuns() {
 }
 
 async function loadConnections() {
-  try { connections.value = await listConnections(form.tenantId) }
+  try {
+    connections.value = await listConnections(form.tenantId)
+    await Promise.all(connections.value.map(async connection => {
+      const latest = await getLatestConnectionTest(connection.id); if (latest) connectionTests[connection.id] = latest
+    }))
+  }
   catch { connections.value = demoConnections }
 }
 
@@ -62,6 +68,24 @@ async function saveConnection() {
     connections.value.push(created); form.connectionId = created.id
     connectionForm.id = crypto.randomUUID(); connectionForm.name = ''; connectionForm.secretReference = ''
   } catch (error) { message.value = error instanceof Error ? error.message : 'Unable to save connection.' }
+}
+
+const wait = (milliseconds: number) => new Promise(resolve => window.setTimeout(resolve, milliseconds))
+async function testConnection(connection: ConnectionProfile) {
+  if (apiUnavailable.value) {
+    connectionTests[connection.id] = { id: crypto.randomUUID(), tenantId: connection.tenantId,
+      connectionId: connection.id, configurationVersion: connection.configurationVersion, status: 'Pending',
+      failureCategory: null, safeMessage: null, requestedBy: 'demo', requestedAtUtc: new Date().toISOString(),
+      completedAtUtc: null, durationMilliseconds: null }
+    await wait(1200); connectionTests[connection.id].status = 'Succeeded'
+    connectionTests[connection.id].safeMessage = 'Authentication and provider reachability confirmed.'; return
+  }
+  let test = await startConnectionTest(connection.id); connectionTests[connection.id] = test
+  const deadline = Date.now() + 60_000
+  while (test.status === 'Pending' && Date.now() < deadline) {
+    await wait(2000); test = await getConnectionTest(connection.id, test.id); connectionTests[connection.id] = test
+  }
+  if (test.status === 'Pending') message.value = 'The test is still running. You can leave this page and check again later.'
 }
 
 async function loadRecords(runId: string) {
@@ -125,8 +149,9 @@ onMounted(async () => { await Promise.all([refreshRuns(), loadConnections()]) })
         <summary><span><span class="eyebrow">Connector registry</span><strong>{{ connections.length }} configured connection{{ connections.length === 1 ? '' : 's' }}</strong></span><span>Manage capabilities</span></summary>
         <div class="connection-grid">
           <article v-for="connection in connections" :key="connection.id" class="connection-card">
-            <div><strong>{{ connection.name }}</strong><small>{{ connection.provider }} · {{ connection.configurationVersion.slice(0, 8) }}</small></div>
+            <div><strong>{{ connection.name }}</strong><small>{{ connection.provider }} · {{ connection.configurationVersion.slice(0, 8) }}</small><small v-if="connectionTests[connection.id]" class="test-result" :data-status="connectionTests[connection.id].status">{{ formatStatus(connectionTests[connection.id].status) }}<template v-if="connectionTests[connection.id].safeMessage"> · {{ connectionTests[connection.id].safeMessage }}</template><template v-if="connectionTests[connection.id].completedAtUtc"> · {{ formatDate(connectionTests[connection.id].completedAtUtc!) }}<template v-if="connectionTests[connection.id].durationMilliseconds"> ({{ connectionTests[connection.id].durationMilliseconds }} ms)</template></template></small></div>
             <div class="capabilities"><span class="enabled">Credential configured</span><span :class="{ enabled: connection.supportsIdempotencyKey }">Idempotency key</span><span :class="{ enabled: connection.supportsReadAfterWrite }">Read after write</span><span>{{ connection.maxConfirmedNoCommitRetries }} safe retries</span></div>
+            <button class="secondary-button test-button" :disabled="connectionTests[connection.id]?.status === 'Pending'" @click="testConnection(connection)">{{ connectionTests[connection.id]?.status === 'Pending' ? 'Testing…' : 'Test connection' }}</button>
           </article>
           <form class="connection-form" @submit.prevent="saveConnection">
             <label>Connection name<input v-model.trim="connectionForm.name" required placeholder="FieldFlo → Sage 100" /></label>
