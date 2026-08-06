@@ -7,6 +7,7 @@ public sealed class RelayWorksDbContext(DbContextOptions<RelayWorksDbContext> op
 {
     public DbSet<IntegrationRun> IntegrationRuns => Set<IntegrationRun>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+    public DbSet<IntegrationRecordProjection> IntegrationRecordProjections => Set<IntegrationRecordProjection>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -25,5 +26,20 @@ public sealed class RelayWorksDbContext(DbContextOptions<RelayWorksDbContext> op
         outbox.Property(message => message.Type).HasMaxLength(200);
         outbox.Property(message => message.Payload).HasColumnType("nvarchar(max)");
         outbox.HasIndex(message => message.DispatchedAtUtc);
+
+        var records = modelBuilder.Entity<IntegrationRecordProjection>();
+        records.ToTable("IntegrationRecordProjections");
+        records.HasKey(x => x.Id);
+        records.Property(x => x.SourceRecordId).HasMaxLength(200);
+        records.Property(x => x.SourceVersion).HasMaxLength(100);
+        records.Property(x => x.EmployeeReference).HasMaxLength(200);
+        records.Property(x => x.ProjectReference).HasMaxLength(200);
+        records.Property(x => x.Status).HasMaxLength(40);
+        records.Property(x => x.ErrorCode).HasMaxLength(100);
+        records.Property(x => x.ErrorMessage).HasMaxLength(2000);
+        records.Property(x => x.DestinationReference).HasMaxLength(300);
+        records.Property(x => x.ResolutionNotes).HasMaxLength(2000);
+        records.HasIndex(x => new { x.RunId, x.SourceRecordId, x.SourceVersion }).IsUnique();
+        records.HasIndex(x => new { x.TenantId, x.Status, x.UpdatedAtUtc });
     }
 }

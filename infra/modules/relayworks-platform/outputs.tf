@@ -17,3 +17,7 @@ output "service_bus_namespace" {
 output "sql_server_fqdn" {
   value = azurerm_mssql_server.main.fully_qualified_domain_name
 }
+
+output "worker_ledger_database" {
+  value = azurerm_mssql_database.worker_ledger.name
+}

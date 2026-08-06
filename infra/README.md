@@ -20,7 +20,7 @@ No state, plan, backend configuration, or populated variable file belongs in sou
 
 ## Identity and database bootstrap
 
-Container Apps use user-assigned managed identities for Azure Container Registry, Service Bus, and Azure SQL authentication. Terraform creates the Entra-only SQL server and private endpoint. After the database exists, an Entra administrator must create the Control Plane identity as a contained database user and grant only the permissions needed to run the application. EF migrations should run from an approved deployment job with network access to the private endpoint; Terraform does not execute migrations.
+Container Apps use user-assigned managed identities for Azure Container Registry, Service Bus, and Azure SQL authentication. Terraform creates the Entra-only SQL server and private endpoint. After the databases exist, an Entra administrator must create each service identity as a contained user in only its owned database and grant only the permissions needed by that application. EF migrations should run from an approved deployment job with network access to the private endpoint; Terraform does not execute migrations.
 
 ## Current scope
 
@@ -30,7 +30,7 @@ Implemented in Terraform:
 - Control Plane and Sync Worker apps;
 - Azure Static Web Apps host for the Vue console (content deployment remains in CI);
 - Azure Container Registry;
-- Azure SQL server and control-plane database;
+- Azure SQL server with separate Control Plane and Worker ledger databases;
 - Service Bus command queue, event topic, and Control Plane subscription;
 - managed identities and least-privilege Service Bus roles;
 - Key Vault, Log Analytics, and Application Insights.

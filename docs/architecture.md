@@ -2,62 +2,61 @@
 
 ## Service boundaries
 
-RelayWorks uses two independently deployable services in Iteration 2.
-
 | Service | Owns | Does not own |
 | --- | --- | --- |
-| Control Plane | tenants, connections, run lifecycle, idempotency, outbox, operator API | vendor payload processing |
-| Sync Worker | command consumption, canonical mapping, validation, connector execution | Control Plane database or domain |
+| Control Plane | run lifecycle, tenant idempotency, command outbox, operator read projections and resolutions | connector execution or Worker ledger |
+| Sync Worker | command inbox, canonical mapping, delivery ledger, connector execution, event outbox | Control Plane database or operator state |
 
-The shared `RelayWorks.Contracts` assembly contains versioned messages and canonical transfer contracts only. It contains no persistence or business-service implementation.
+The shared `RelayWorks.Contracts` assembly contains versioned messages and canonical transfer contracts only.
 
-## Time-entry export sequence
+## Record-safe time-entry flow
 
 ```mermaid
 sequenceDiagram
-    participant UI as Vue Console
     participant CP as Control Plane
-    participant DB as Azure SQL
     participant SB as Service Bus
     participant SW as Sync Worker
-
-    UI->>CP: Submit TimeEntryExport
-    CP->>DB: Save run and outbox
-    CP-->>UI: 202 Created
+    participant WL as Worker Ledger
+    participant DST as Destination
     CP->>SB: IntegrationRunRequestedV1
-    SB->>SW: Deliver command
-    SW->>SW: Map and validate entries
-    SW->>SB: IntegrationRunCompletedV1
-    SB->>CP: Deliver completion
-    CP->>DB: Update terminal state
+    SB->>SW: At-least-once command
+    SW->>WL: Acquire unique record gate
+    SW->>DST: Write canonical record
+    DST-->>SW: Success, rejection, or unknown
+    SW->>WL: Save outcome and event outbox
+    SW->>SB: Record results then completion
+    SB->>CP: Build operator projection
 ```
 
 ## Delivery semantics
 
-The workflow is at-least-once:
+- Inbox identity makes a fully processed command a no-op on redelivery.
+- The record key `(tenant, connection, operation, source id, source version)` is unique.
+- The gate is persisted before the destination call.
+- Terminal rows prevent a second destination call.
+- An interrupted or timed-out call becomes `UnknownOutcome`, never an automatic retry.
+- Worker events use a transactional outbox; Control projections use a natural unique key and upsert.
 
-- The outbox prevents the database/message dual-write gap.
-- The outbox message id becomes the Service Bus message id.
-- Terraform enables Service Bus duplicate detection.
-- The tenant/idempotency-key index prevents duplicate run creation.
-- The result consumer treats repeated terminal completion events as successful no-ops.
+This is not exactly-once delivery. It is an explicit duplicate-avoidance protocol with a human reconciliation path for unknowable external outcomes.
 
-This design does not claim exactly-once delivery. Future connector calls require destination idempotency or a durable processed-record ledger.
+## Record states
 
-## Canonical time entry
+| State | Meaning | Automatic action |
+| --- | --- | --- |
+| `Processing` | Gate acquired; connector call in progress | Continue current attempt only |
+| `Succeeded` | Destination confirmed commit | None |
+| `Rejected` | Deterministic validation/business rejection | Correct source or mapping |
+| `RetryableFailure` | Confirmed no-commit transient failure | Retry policy planned |
+| `UnknownOutcome` | Commit may have occurred | Stop; operator verification required |
+| `ManuallyResolved` | Operator documented disposition in read projection | None |
 
-`CanonicalTimeEntryV1` deliberately contains a narrow set of cross-system fields: tenant, source identity/version, employee, project, work date, regular/overtime hours, labor code, and correlation id. Vendor payloads remain inside connector adapters.
+## Data ownership
 
-Iteration 2 creates deterministic representative records inside the Worker. Every tenth entry omits its project reference and is rejected with a stable validation rule. Record-level error persistence is planned for Iteration 3.
+Terraform provisions two databases on the same private Azure SQL logical server. Sharing the server controls cost; separate databases preserve service ownership. Managed identities authenticate each Container App. Schema migrations run in an approved deployment job rather than Terraform provisioners.
 
-## Azure deployment
+## Remaining production work
 
-Terraform provisions a private-networked Container Apps environment, Azure SQL private endpoint, Service Bus, identities, registry, Key Vault, and observability resources. Managed identities authenticate application services. EF migrations are run by an approved deployment job, not a Terraform provisioner.
-
-## Known next work
-
-- Persist record-level validation and reconciliation issues.
-- Add mapping profiles and connection configuration.
-- Add simulated source/destination connector ports rather than generating records in the processor.
-- Instrument traces, metrics, and logs with OpenTelemetry.
-- Add retry classification and an operator recovery workflow.
+- Replace simulated adapters with FieldFlo and accounting/payroll connectors.
+- Add authentication, authorization, tenant isolation tests, and immutable resolution audit actors.
+- Define connector-specific read-after-write and reconciliation capabilities.
+- Add OpenTelemetry, alerting, ledger retention policy, and failure-injection tests.

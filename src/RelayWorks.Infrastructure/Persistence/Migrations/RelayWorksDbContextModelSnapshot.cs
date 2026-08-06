@@ -44,5 +44,26 @@ public sealed class RelayWorksDbContextModelSnapshot : ModelSnapshot
             entity.HasIndex("DispatchedAtUtc");
             entity.ToTable("OutboxMessages");
         });
+
+        modelBuilder.Entity("RelayWorks.Infrastructure.Persistence.IntegrationRecordProjection", entity =>
+        {
+            entity.Property<Guid>("Id").ValueGeneratedNever().HasColumnType("uniqueidentifier");
+            entity.Property<string>("DestinationReference").HasMaxLength(300).HasColumnType("nvarchar(300)");
+            entity.Property<string>("EmployeeReference").IsRequired().HasMaxLength(200).HasColumnType("nvarchar(200)");
+            entity.Property<string>("ErrorCode").HasMaxLength(100).HasColumnType("nvarchar(100)");
+            entity.Property<string>("ErrorMessage").HasMaxLength(2000).HasColumnType("nvarchar(2000)");
+            entity.Property<string>("ProjectReference").IsRequired().HasMaxLength(200).HasColumnType("nvarchar(200)");
+            entity.Property<string>("ResolutionNotes").HasMaxLength(2000).HasColumnType("nvarchar(2000)");
+            entity.Property<Guid>("RunId").HasColumnType("uniqueidentifier");
+            entity.Property<string>("SourceRecordId").IsRequired().HasMaxLength(200).HasColumnType("nvarchar(200)");
+            entity.Property<string>("SourceVersion").IsRequired().HasMaxLength(100).HasColumnType("nvarchar(100)");
+            entity.Property<string>("Status").IsRequired().HasMaxLength(40).HasColumnType("nvarchar(40)");
+            entity.Property<Guid>("TenantId").HasColumnType("uniqueidentifier");
+            entity.Property<DateTimeOffset>("UpdatedAtUtc").HasColumnType("datetimeoffset");
+            entity.HasKey("Id");
+            entity.HasIndex("RunId", "SourceRecordId", "SourceVersion").IsUnique();
+            entity.HasIndex("TenantId", "Status", "UpdatedAtUtc");
+            entity.ToTable("IntegrationRecordProjections");
+        });
     }
 }

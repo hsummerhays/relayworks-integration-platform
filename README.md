@@ -1,60 +1,33 @@
 # RelayWorks Integration Platform
 
-RelayWorks is a .NET and Vue reference platform for reliable customer-system integrations. Iteration 2 demonstrates an asynchronous construction/payroll workflow across independently deployable Control Plane and Sync Worker services.
+RelayWorks is a .NET and Vue reference platform for reliable construction-system integrations. Iteration 3 demonstrates record-safe time-entry delivery across independently deployable Control Plane and Sync Worker services.
 
 ## Implemented vertical slice
 
 1. An operator submits a tenant-scoped time-entry export through the Vue console.
-2. The Control Plane saves the integration run and an outbox message in one Azure SQL transaction.
-3. The outbox publisher sends an `IntegrationRunRequestedV1` command to Azure Service Bus.
-4. The Sync Worker maps representative source records into `CanonicalTimeEntryV1` and validates them.
-5. The Worker publishes accepted/rejected counts as an `IntegrationRunCompletedV1` event.
-6. The Control Plane consumes that event and updates the durable run state.
-7. Repeated submissions are constrained by a tenant/idempotency-key unique index.
+2. The Control Plane saves the run and command outbox in one Azure SQL transaction.
+3. Azure Service Bus delivers `IntegrationRunRequestedV1` at least once.
+4. Before each destination call, the Worker acquires a unique record delivery gate in its own database.
+5. The Worker persists record outcomes and versioned result events in one database transaction.
+6. The Control Plane builds an operator-facing projection of rejected and ambiguous records.
+7. `UnknownOutcome` records stop until a human verifies the destination and documents resolution.
 
-The source and destination connectors are simulations. RelayWorks does not claim a production FieldFlo, Sage, QuickBooks, or other vendor connector.
+The connectors are simulations. RelayWorks does not claim a production FieldFlo, Sage, QuickBooks, or other vendor connector.
 
-## Architecture
+## Safety invariant
 
-```mermaid
-flowchart TD
-    UI["Vue Operations Console"] --> CP["Control Plane API"]
-    CP --> SQL["Azure SQL + outbox"]
-    CP --> BUS["Azure Service Bus"]
-    BUS --> WORKER["Sync Worker"]
-    WORKER --> BUS
-    BUS --> CP
-```
+> RelayWorks never retries a destination write whose outcome is unknown.
 
-The services share only versioned integration contracts. The Worker does not reference the Control Plane domain, application, or infrastructure projects.
+The ledger key is `(tenant, connection, operation, source record, source version)`. A canonical SHA-256 fingerprint detects changed data presented under the same source version. Neither Service Bus duplicate detection nor destination idempotency is treated as the primary financial-safety boundary.
 
-## Repository layout
+## Service data ownership
 
-```text
-src/
-  RelayWorks.ControlPlane.Api/  HTTP boundary and hosted message processes
-  RelayWorks.Application/       Control Plane use cases and ports
-  RelayWorks.Domain/            Control Plane domain and invariants
-  RelayWorks.Infrastructure/    Azure SQL, EF Core, outbox, Service Bus
-  RelayWorks.Contracts/         Versioned inter-service contracts
-  RelayWorks.Sync.Worker/       Time-entry processing service
-tests/
-  RelayWorks.Domain.Tests/
-  RelayWorks.Sync.Worker.Tests/
-web/relayworks-console/          Vue 3 + TypeScript operations console
-infra/                           Terraform bootstrap, modules, and dev environment
-docs/                            Architecture and decisions
-```
+| Service | Database | Owns |
+| --- | --- | --- |
+| Control Plane | `relayworks-control` | runs, command outbox, record projections, manual resolutions |
+| Sync Worker | `relayworks-worker` | command inbox, processed-record ledger, event outbox |
 
-## Technology
-
-- .NET 10 and ASP.NET Core
-- Vue 3, TypeScript, and Vite
-- EF Core 10 and Azure SQL
-- Azure Service Bus
-- Azure Container Apps and Container Registry
-- Terraform with the AzureRM provider
-- Managed identities and private Azure SQL networking
+Services share only versioned contracts and never query one another's database.
 
 ## Local validation
 
@@ -72,22 +45,19 @@ terraform init -backend=false
 terraform validate
 ```
 
-Local Control Plane execution requires a SQL Server connection string. Messaging is disabled in `appsettings.Development.json`; submitted commands remain in the outbox until messaging is enabled. See `infra/README.md` for Azure deployment prerequisites.
+Both EF Core migration sets are intended to run from an approved deployment job. Terraform provisions databases and identities but does not execute schema migrations.
 
 ## Status
 
 | Capability | Status |
 | --- | --- |
-| Control Plane and Sync Worker deployables | Implemented |
-| Tenant-scoped idempotency | Implemented |
-| Azure SQL EF model and initial migration | Implemented, not deployed |
-| Transactional outbox and publisher | Implemented |
-| Service Bus command/event round trip | Implemented |
-| Canonical time-entry contract and validation | Implemented with simulated records |
-| Terraform Azure dev environment | Implemented, not applied |
-| Vue operations console | Implemented |
-| Record-level reconciliation storage | Planned |
-| Real vendor connectors | Planned |
-| OpenTelemetry instrumentation | Planned |
+| Microservices and service-owned databases | Implemented |
+| Tenant/run and record-level idempotency | Implemented |
+| Worker inbox, delivery ledger, and event outbox | Implemented |
+| Unknown-outcome reconciliation workflow | Implemented |
+| Record projection and premium operations console | Implemented |
+| Terraform Azure environment | Implemented, not applied |
+| Real vendor connectors and identity/authz | Planned |
+| OpenTelemetry and automated ledger retention | Planned |
 
 RelayWorks is a portfolio/reference implementation, not a production integration product.

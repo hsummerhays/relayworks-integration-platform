@@ -24,3 +24,21 @@ public sealed record IntegrationRunFailedV1(
     string ErrorCode,
     string ErrorMessage,
     DateTimeOffset OccurredAtUtc);
+
+public sealed record IntegrationRecordResultV1(
+    string SourceRecordId,
+    string SourceVersion,
+    string EmployeeReference,
+    string ProjectReference,
+    string Status,
+    string? ErrorCode,
+    string? ErrorMessage,
+    string? DestinationReference,
+    DateTimeOffset OccurredAtUtc);
+
+public sealed record IntegrationRecordResultsReportedV1(
+    Guid MessageId,
+    Guid RunId,
+    Guid TenantId,
+    IReadOnlyList<IntegrationRecordResultV1> Records,
+    DateTimeOffset OccurredAtUtc);

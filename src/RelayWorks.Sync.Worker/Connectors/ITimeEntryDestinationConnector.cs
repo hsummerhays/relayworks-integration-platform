@@ -4,5 +4,13 @@ namespace RelayWorks.Sync.Worker;
 
 public interface ITimeEntryDestinationConnector
 {
-    bool TryWrite(CanonicalTimeEntryV1 entry, out IReadOnlyList<string> validationErrors);
+    DestinationWriteResult Write(CanonicalTimeEntryV1 entry);
 }
+
+public enum DestinationWriteStatus { Succeeded, Rejected, UnknownOutcome }
+
+public sealed record DestinationWriteResult(
+    DestinationWriteStatus Status,
+    string? DestinationReference = null,
+    string? ErrorCode = null,
+    string? ErrorMessage = null);

@@ -78,6 +78,29 @@ runs.MapPost("/", async (
     }
 });
 
+runs.MapGet("/{runId:guid}/records", async (Guid runId, RelayWorksDbContext db, CancellationToken cancellationToken) =>
+    Results.Ok(await db.IntegrationRecordProjections.AsNoTracking()
+        .Where(x => x.RunId == runId).OrderBy(x => x.SourceRecordId).ToListAsync(cancellationToken)));
+
+runs.MapGet("/{runId:guid}/issues", async (Guid runId, RelayWorksDbContext db, CancellationToken cancellationToken) =>
+    Results.Ok(await db.IntegrationRecordProjections.AsNoTracking()
+        .Where(x => x.RunId == runId && (x.Status == "Rejected" || x.Status == "UnknownOutcome"))
+        .OrderByDescending(x => x.Status == "UnknownOutcome").ThenBy(x => x.SourceRecordId)
+        .ToListAsync(cancellationToken)));
+
+app.MapPost("/api/reconciliation-issues/{id:guid}/resolve", async (Guid id,
+    ResolveReconciliationIssueRequest request, RelayWorksDbContext db, TimeProvider timeProvider,
+    CancellationToken cancellationToken) =>
+{
+    var record = await db.IntegrationRecordProjections.FindAsync([id], cancellationToken);
+    if (record is null) return Results.NotFound();
+    try { record.Resolve(request.ResolutionNotes, timeProvider.GetUtcNow()); }
+    catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+    { return Results.ValidationProblem(new Dictionary<string, string[]> { ["resolutionNotes"] = [exception.Message] }); }
+    await db.SaveChangesAsync(cancellationToken);
+    return Results.Ok(record);
+}).WithTags("Reconciliation");
+
 app.MapGet("/health", () => Results.Ok(new { status = "healthy", service = "control-plane" }));
 app.Run();
 
@@ -87,3 +110,5 @@ public sealed record SubmitIntegrationRunRequest(
     IntegrationOperation Operation,
     string IdempotencyKey,
     int TotalRecords);
+
+public sealed record ResolveReconciliationIssueRequest(string ResolutionNotes);

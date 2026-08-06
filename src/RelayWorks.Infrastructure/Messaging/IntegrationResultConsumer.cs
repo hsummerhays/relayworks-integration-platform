@@ -5,6 +5,8 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using RelayWorks.Application.Abstractions;
 using RelayWorks.Contracts.IntegrationRuns;
+using Microsoft.EntityFrameworkCore;
+using RelayWorks.Infrastructure.Persistence;
 
 namespace RelayWorks.Infrastructure.Messaging;
 
@@ -37,6 +39,30 @@ public sealed class IntegrationResultConsumer(
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var repository = scope.ServiceProvider.GetRequiredService<IIntegrationRunRepository>();
+
+        if (args.Message.Subject == nameof(IntegrationRecordResultsReportedV1))
+        {
+            var report = args.Message.Body.ToObjectFromJson<IntegrationRecordResultsReportedV1>()
+                ?? throw new InvalidOperationException("Record result event payload was empty.");
+            var db = scope.ServiceProvider.GetRequiredService<RelayWorksDbContext>();
+            foreach (var record in report.Records)
+            {
+                var projection = await db.IntegrationRecordProjections.SingleOrDefaultAsync(x =>
+                    x.RunId == report.RunId && x.SourceRecordId == record.SourceRecordId &&
+                    x.SourceVersion == record.SourceVersion, args.CancellationToken);
+                if (projection is null)
+                    db.IntegrationRecordProjections.Add(IntegrationRecordProjection.Create(report.RunId,
+                        report.TenantId, record.SourceRecordId, record.SourceVersion,
+                        record.EmployeeReference, record.ProjectReference, record.Status,
+                        record.ErrorCode, record.ErrorMessage, record.DestinationReference, record.OccurredAtUtc));
+                else
+                    projection.Update(record.Status, record.ErrorCode, record.ErrorMessage,
+                        record.DestinationReference, record.OccurredAtUtc);
+            }
+            await db.SaveChangesAsync(args.CancellationToken);
+            await args.CompleteMessageAsync(args.Message, args.CancellationToken);
+            return;
+        }
 
         if (args.Message.Subject == nameof(IntegrationRunCompletedV1))
         {

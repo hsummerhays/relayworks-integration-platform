@@ -177,6 +177,17 @@ resource "azurerm_mssql_database" "control_plane" {
   tags                        = var.tags
 }
 
+resource "azurerm_mssql_database" "worker_ledger" {
+  name                        = "relayworks-worker"
+  server_id                   = azurerm_mssql_server.main.id
+  sku_name                    = "GP_S_Gen5_1"
+  min_capacity                = 0.5
+  auto_pause_delay_in_minutes = 60
+  max_size_gb                 = 32
+  zone_redundant              = false
+  tags                        = var.tags
+}
+
 resource "azurerm_key_vault" "main" {
   name                       = substr(replace("kv-${local.name}", "-", ""), 0, 24)
   location                   = azurerm_resource_group.main.location
@@ -333,6 +344,10 @@ resource "azurerm_container_app" "sync_worker" {
       env {
         name  = "APPLICATIONINSIGHTS_CONNECTION_STRING"
         value = azurerm_application_insights.main.connection_string
+      }
+      env {
+        name  = "ConnectionStrings__WorkerLedger"
+        value = "Server=tcp:${azurerm_mssql_server.main.fully_qualified_domain_name},1433;Database=${azurerm_mssql_database.worker_ledger.name};Authentication=Active Directory Default;Encrypt=True;TrustServerCertificate=False"
       }
     }
   }

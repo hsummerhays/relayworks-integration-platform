@@ -2,6 +2,7 @@ import type {
   IntegrationRun,
   SubmitIntegrationRunRequest,
   SubmitIntegrationRunResult,
+  IntegrationRecordResult,
 } from './types'
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5080'
@@ -11,6 +12,18 @@ async function ensureSuccess(response: Response): Promise<Response> {
 
   const detail = await response.text()
   throw new Error(detail || `Request failed with status ${response.status}`)
+}
+
+export async function listRunRecords(runId: string): Promise<IntegrationRecordResult[]> {
+  const response = await ensureSuccess(await fetch(`${apiBaseUrl}/api/integration-runs/${runId}/records`))
+  return response.json() as Promise<IntegrationRecordResult[]>
+}
+
+export async function resolveIssue(id: string, resolutionNotes: string): Promise<IntegrationRecordResult> {
+  const response = await ensureSuccess(await fetch(`${apiBaseUrl}/api/reconciliation-issues/${id}/resolve`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ resolutionNotes }),
+  }))
+  return response.json() as Promise<IntegrationRecordResult>
 }
 
 export async function listIntegrationRuns(): Promise<IntegrationRun[]> {

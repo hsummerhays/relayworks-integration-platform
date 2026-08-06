@@ -33,3 +33,22 @@ export interface SubmitIntegrationRunResult {
   run: IntegrationRun
   isDuplicate: boolean
 }
+
+export type RecordResultStatus =
+  | 'Processing' | 'Succeeded' | 'Rejected' | 'RetryableFailure' | 'UnknownOutcome' | 'ManuallyResolved'
+
+export interface IntegrationRecordResult {
+  id: string
+  runId: string
+  tenantId: string
+  sourceRecordId: string
+  sourceVersion: string
+  employeeReference: string
+  projectReference: string
+  status: RecordResultStatus
+  errorCode: string | null
+  errorMessage: string | null
+  destinationReference: string | null
+  resolutionNotes: string | null
+  updatedAtUtc: string
+}
