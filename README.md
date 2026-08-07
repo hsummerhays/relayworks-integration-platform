@@ -1,6 +1,6 @@
 # RelayWorks Integration Platform
 
-RelayWorks is a .NET and Vue reference platform for reliable construction-system integrations. Iteration 9 adds end-to-end observability, operational readiness, and actionable Azure Monitor alerts.
+RelayWorks is a .NET and Vue reference platform for reliable construction-system integrations. Iteration 10 adds destination-safe throttling, backoff, and circuit breaking for external construction systems.
 
 ## Implemented vertical slice
 
@@ -63,8 +63,9 @@ Both EF Core migration sets are intended to run from an approved deployment job.
 | Entra SPA/API authentication and app-role authorization | Implemented; registrations not provisioned |
 | Distributed traces, connector metrics, and business correlation | Implemented |
 | SQL/outbox readiness probe and Azure Monitor alerts | Implemented, not applied |
+| Per-connection concurrency limits, token bucket, safe retries, and circuit breaker | Implemented |
 | Terraform Azure environment | Implemented, not applied |
 | Real vendor connectors | Planned |
-| Automated ledger retention | Planned |
+| Distributed limiter coordination, durable long-delay retries, and ledger retention | Planned |
 
 RelayWorks is a portfolio/reference implementation, not a production integration product.

@@ -39,3 +39,18 @@ variable "alert_email" {
   type = string
   description = "Operations email receiving RelayWorks Azure Monitor alerts."
 }
+variable "connector_max_concurrency" {
+  type        = number
+  description = "Maximum concurrent destination calls for one connection profile."
+  default     = 2
+}
+variable "connector_requests_per_second" {
+  type        = number
+  description = "Sustained destination request rate for one connection profile."
+  default     = 5
+}
+variable "connector_burst_capacity" {
+  type        = number
+  description = "Token-bucket burst capacity for one connection profile."
+  default     = 5
+}

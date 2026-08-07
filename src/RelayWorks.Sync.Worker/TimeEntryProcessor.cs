@@ -7,13 +7,15 @@ using RelayWorks.Contracts.TimeEntries;
 using RelayWorks.Sync.Worker.Persistence;
 using RelayWorks.Sync.Worker.Telemetry;
 using System.Diagnostics;
+using RelayWorks.Sync.Worker.Resilience;
 
 namespace RelayWorks.Sync.Worker;
 
 public sealed class TimeEntryProcessor(
     ITimeEntrySourceConnector sourceConnector,
     ITimeEntryDestinationConnectorFactory destinationFactory,
-    WorkerLedgerDbContext dbContext)
+    WorkerLedgerDbContext dbContext,
+    DestinationResilienceExecutor resilience)
 {
     public async Task<IntegrationRunCompletedV1> ProcessAsync(
         IntegrationRunRequestedV1 command,
@@ -79,7 +81,8 @@ public sealed class TimeEntryProcessor(
             if (existing.State == RecordDeliveryState.Processing)
             {
                 var lookup = profile.SupportsReadAfterWrite
-                    ? destinationConnector.FindByIdempotencyKey(destinationKey)
+                    ? await resilience.LookupAsync(command.ConnectionId, profile.Provider,
+                        destinationConnector, destinationKey, cancellationToken)
                     : new DestinationLookupResult(false);
                 if (lookup.Found)
                     existing.Finish(RecordDeliveryState.Succeeded, lookup.DestinationReference,
@@ -102,19 +105,14 @@ public sealed class TimeEntryProcessor(
         await dbContext.SaveChangesAsync(cancellationToken);
 
         var connectorTimer = Stopwatch.StartNew();
-        var write = destinationConnector.Write(entry, destinationKey);
-        var retries = 0;
-        while (write.Status == DestinationWriteStatus.ConfirmedNoCommit &&
-               retries < profile.MaxConfirmedNoCommitRetries)
-        {
-            retries++;
-            delivery.RecordAttempt(now);
-            write = destinationConnector.Write(entry, destinationKey);
-        }
+        var write = await resilience.WriteAsync(command.ConnectionId, profile.Provider,
+            profile.MaxConfirmedNoCommitRetries, destinationConnector, entry, destinationKey,
+            () => delivery.RecordAttempt(now), cancellationToken);
 
         if (write.Status == DestinationWriteStatus.UnknownOutcome && profile.SupportsReadAfterWrite)
         {
-            var lookup = destinationConnector.FindByIdempotencyKey(destinationKey);
+            var lookup = await resilience.LookupAsync(command.ConnectionId, profile.Provider,
+                destinationConnector, destinationKey, cancellationToken);
             if (lookup.Found)
                 write = new DestinationWriteResult(DestinationWriteStatus.Succeeded,
                     lookup.DestinationReference, "RECOVERED_BY_LOOKUP",

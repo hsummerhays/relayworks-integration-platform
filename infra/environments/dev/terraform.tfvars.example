@@ -7,3 +7,6 @@ sync_worker_image        = "example.azurecr.io/relayworks-worker:iteration-2"
 control_plane_api_client_id = "00000000-0000-0000-0000-000000000000"
 console_client_id           = "00000000-0000-0000-0000-000000000000"
 alert_email                 = "relayworks-operations@example.com"
+connector_max_concurrency   = 2
+connector_requests_per_second = 5
+connector_burst_capacity    = 5

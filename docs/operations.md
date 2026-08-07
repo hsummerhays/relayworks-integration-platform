@@ -10,8 +10,17 @@
 | Service Bus dead-letter alert | A command or result exhausted normal delivery | Inspect dead-letter reason and message type, then compare the Worker inbox/ledger before resubmission. |
 | Application exception alert | One or both services emitted an unhandled exception | Use operation and correlation fields to identify the affected run or test. |
 | `UnknownOutcome` record | A connector write may have committed | Verify at the destination and use the reconciliation workflow; never blind-retry. |
+| Connector circuit opens | Repeated calls were confirmed not committed | Check provider health and rate-limit guidance; the connection is paused briefly to prevent a retry storm. |
 
 The alert email is a Terraform input. Production should use a monitored distribution list or incident-management receiver rather than an individual mailbox.
+
+## Destination throttling
+
+The Worker shares limits by connection-profile ID, so simultaneous runs on the active replica cannot independently overwhelm the same ERP. Defaults are two concurrent calls, five sustained calls per second, and a five-call burst. Tune these against the provider contract and the customer's environment; an older on-premises endpoint may require substantially lower values. Terraform intentionally caps the Worker at one replica until the token and circuit state have distributed coordination.
+
+A connector may translate HTTP 429 into `ConfirmedNoCommit` only when the provider contract guarantees the request was rejected before processing. It should copy a valid `Retry-After` value into the connector result. A timeout after sending request content remains `UnknownOutcome`, regardless of HTTP retry conventions.
+
+Current backoff is intentionally bounded to short Worker waits. Long provider maintenance windows require durable scheduled redelivery rather than holding a Worker execution open.
 
 ## Application Insights queries
 

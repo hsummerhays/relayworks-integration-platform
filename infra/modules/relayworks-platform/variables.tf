@@ -32,6 +32,9 @@ variable "sync_worker_image" {
 variable "control_plane_api_client_id" { type = string }
 variable "console_client_id" { type = string }
 variable "alert_email" { type = string }
+variable "connector_max_concurrency" { type = number default = 2 }
+variable "connector_requests_per_second" { type = number default = 5 }
+variable "connector_burst_capacity" { type = number default = 5 }
 
 variable "tags" {
   type = map(string)

@@ -399,7 +399,9 @@ resource "azurerm_container_app" "sync_worker" {
 
   template {
     min_replicas = 1
-    max_replicas = 5
+    # The connection-scoped limiter is replica-local. Keep one Worker replica until
+    # a distributed lease/token store coordinates destination quotas across replicas.
+    max_replicas = 1
     container {
       name   = "sync-worker"
       image  = var.sync_worker_image
@@ -420,6 +422,18 @@ resource "azurerm_container_app" "sync_worker" {
       env {
         name  = "ConnectionStrings__WorkerLedger"
         value = "Server=tcp:${azurerm_mssql_server.main.fully_qualified_domain_name},1433;Database=${azurerm_mssql_database.worker_ledger.name};Authentication=Active Directory Default;Encrypt=True;TrustServerCertificate=False"
+      }
+      env {
+        name  = "ConnectorResilience__MaxConcurrentRequestsPerConnection"
+        value = tostring(var.connector_max_concurrency)
+      }
+      env {
+        name  = "ConnectorResilience__RequestsPerSecondPerConnection"
+        value = tostring(var.connector_requests_per_second)
+      }
+      env {
+        name  = "ConnectorResilience__BurstCapacityPerConnection"
+        value = tostring(var.connector_burst_capacity)
       }
     }
   }

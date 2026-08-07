@@ -2,6 +2,8 @@ using Microsoft.EntityFrameworkCore;
 using RelayWorks.Contracts.IntegrationRuns;
 using RelayWorks.Sync.Worker;
 using RelayWorks.Sync.Worker.Persistence;
+using RelayWorks.Sync.Worker.Resilience;
+using Microsoft.Extensions.Options;
 
 namespace RelayWorks.Sync.Worker.Tests;
 
@@ -14,7 +16,7 @@ public sealed class TimeEntryProcessorTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
         await using var db = new WorkerLedgerDbContext(options);
         var processor = new TimeEntryProcessor(new SimulatedFieldOperationsConnector(),
-            new FixedConnectorFactory(new SimulatedAccountingConnector()), db);
+            new FixedConnectorFactory(new SimulatedAccountingConnector()), db, Resilience());
         var now = DateTimeOffset.Parse("2026-08-06T12:00:00Z");
         var command = new IntegrationRunRequestedV1(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
             Guid.NewGuid(), "TimeEntryExport", 17, now,
@@ -37,7 +39,7 @@ public sealed class TimeEntryProcessorTests
         await using var db = new WorkerLedgerDbContext(options);
         var destination = new CountingDestination();
         var processor = new TimeEntryProcessor(new SimulatedFieldOperationsConnector(),
-            new FixedConnectorFactory(destination), db);
+            new FixedConnectorFactory(destination), db, Resilience());
         var command = new IntegrationRunRequestedV1(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
             Guid.NewGuid(), "TimeEntryExport", 3, DateTimeOffset.Parse("2026-08-06T12:00:00Z"),
             new ConnectorExecutionProfileV1("Test", true, false, 0, "test-v1",
@@ -54,12 +56,16 @@ public sealed class TimeEntryProcessorTests
     private sealed class CountingDestination : ITimeEntryDestinationConnector
     {
         public int Writes { get; private set; }
-        public DestinationWriteResult Write(RelayWorks.Contracts.TimeEntries.CanonicalTimeEntryV1 entry, string idempotencyKey)
+        public Task<DestinationWriteResult> WriteAsync(
+            RelayWorks.Contracts.TimeEntries.CanonicalTimeEntryV1 entry, string idempotencyKey,
+            CancellationToken cancellationToken)
         {
             Writes++;
-            return new(DestinationWriteStatus.Succeeded, $"destination:{entry.SourceRecordId}");
+            return Task.FromResult(new DestinationWriteResult(DestinationWriteStatus.Succeeded,
+                $"destination:{entry.SourceRecordId}"));
         }
-        public DestinationLookupResult FindByIdempotencyKey(string idempotencyKey) => new(false);
+        public Task<DestinationLookupResult> FindByIdempotencyKeyAsync(string idempotencyKey,
+            CancellationToken cancellationToken) => Task.FromResult(new DestinationLookupResult(false));
         public Task<ConnectorHealthResult> TestConnectionAsync(CancellationToken cancellationToken) =>
             Task.FromResult(new ConnectorHealthResult(true));
     }
@@ -69,5 +75,26 @@ public sealed class TimeEntryProcessorTests
     {
         public Task<ITimeEntryDestinationConnector> CreateAsync(ConnectorExecutionProfileV1 profile,
             CancellationToken cancellationToken) => Task.FromResult(connector);
+    }
+
+    private static DestinationResilienceExecutor Resilience()
+    {
+        var options = Options.Create(new ConnectorResilienceOptions
+        {
+            MaxConcurrentRequestsPerConnection = 10,
+            RequestsPerSecondPerConnection = 1000,
+            BurstCapacityPerConnection = 1000,
+            BaseRetryDelayMilliseconds = 1,
+            CircuitFailureThreshold = 100
+        });
+        var delay = new NoDelay();
+        return new DestinationResilienceExecutor(
+            new ConnectionExecutionGate(options, TimeProvider.System, delay),
+            options, TimeProvider.System, delay);
+    }
+
+    private sealed class NoDelay : IResilienceDelay
+    {
+        public Task WaitAsync(TimeSpan delay, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 }

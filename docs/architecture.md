@@ -47,6 +47,9 @@ sequenceDiagram
 - Connection tests are durable commands executed by the Worker; the console polls their Control Plane projection.
 - W3C trace context crosses Service Bus in application properties, while run/test IDs remain explicit business correlation.
 - Low-cardinality metrics describe outbox lag, connector duration, record outcomes, and cache behavior without tenant or secret dimensions.
+- A replica-wide, per-connection token bucket and concurrency gate protect each destination across simultaneous runs; Terraform holds the Worker at one replica until coordination is distributed.
+- Exponential backoff, jitter, and `Retry-After` are honored only after a connector proves the prior request did not commit.
+- Repeated confirmed failures open a per-connection circuit; ambiguous outcomes still go directly to reconciliation.
 
 This is not exactly-once delivery. It is an explicit duplicate-avoidance protocol with a human reconciliation path for unknowable external outcomes.
 
@@ -71,3 +74,4 @@ Terraform provisions two databases on the same private Azure SQL logical server.
 - Add tenant-isolation and app-role integration tests.
 - Define connector-specific read-after-write and reconciliation capabilities.
 - Add ledger retention policy and failure-injection tests.
+- Replace in-process waits with durable Service Bus scheduling for provider-requested delays longer than the bounded retry window.

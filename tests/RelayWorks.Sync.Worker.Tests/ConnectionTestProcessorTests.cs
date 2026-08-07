@@ -34,8 +34,11 @@ public sealed class ConnectionTestProcessorTests
     }
     private sealed class Connector : ITimeEntryDestinationConnector
     {
-        public DestinationWriteResult Write(CanonicalTimeEntryV1 entry, string idempotencyKey) => new(DestinationWriteStatus.Succeeded);
-        public DestinationLookupResult FindByIdempotencyKey(string idempotencyKey) => new(false);
+        public Task<DestinationWriteResult> WriteAsync(CanonicalTimeEntryV1 entry, string idempotencyKey,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new DestinationWriteResult(DestinationWriteStatus.Succeeded));
+        public Task<DestinationLookupResult> FindByIdempotencyKeyAsync(string idempotencyKey,
+            CancellationToken cancellationToken) => Task.FromResult(new DestinationLookupResult(false));
         public Task<ConnectorHealthResult> TestConnectionAsync(CancellationToken cancellationToken) =>
             Task.FromResult(new ConnectorHealthResult(true, SafeMessage: "Connected."));
     }

@@ -12,6 +12,9 @@ module "relayworks" {
   control_plane_api_client_id = var.control_plane_api_client_id
   console_client_id           = var.console_client_id
   alert_email                 = var.alert_email
+  connector_max_concurrency   = var.connector_max_concurrency
+  connector_requests_per_second = var.connector_requests_per_second
+  connector_burst_capacity    = var.connector_burst_capacity
 
   tags = {
     application = "relayworks"

@@ -8,6 +8,7 @@ using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Azure.Monitor.OpenTelemetry.Exporter;
+using RelayWorks.Sync.Worker.Resilience;
 
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddSingleton(TimeProvider.System);
@@ -30,6 +31,17 @@ builder.Services.AddDbContext<WorkerLedgerDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("WorkerLedger")));
 builder.Services.AddScoped<TimeEntryProcessor>();
 builder.Services.AddScoped<ConnectionTestProcessor>();
+builder.Services.AddOptions<ConnectorResilienceOptions>()
+    .Bind(builder.Configuration.GetSection(ConnectorResilienceOptions.SectionName))
+    .Validate(options => options.MaxConcurrentRequestsPerConnection > 0 &&
+        options.RequestsPerSecondPerConnection > 0 && options.BurstCapacityPerConnection > 0 &&
+        options.BaseRetryDelayMilliseconds > 0 && options.MaxRetryDelaySeconds > 0 &&
+        options.CircuitFailureThreshold > 0 && options.CircuitBreakSeconds > 0,
+        "Connector resilience values must be positive.")
+    .ValidateOnStart();
+builder.Services.AddSingleton<IResilienceDelay, SystemResilienceDelay>();
+builder.Services.AddSingleton<ConnectionExecutionGate>();
+builder.Services.AddSingleton<DestinationResilienceExecutor>();
 builder.Services.AddScoped<ITimeEntrySourceConnector, SimulatedFieldOperationsConnector>();
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<ISecretValueProvider, KeyVaultSecretValueProvider>();

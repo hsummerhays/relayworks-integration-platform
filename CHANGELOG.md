@@ -1,5 +1,15 @@
 # Changelog
 
+## Iteration 10 — 2026-08-07
+
+- Converted destination writes and idempotency lookups to cancellation-aware asynchronous connector operations.
+- Added a shared per-connection concurrency gate and token-bucket request limiter across concurrent Worker runs.
+- Added bounded exponential backoff with jitter and provider `Retry-After` support.
+- Preserved the financial-safety boundary: only `ConfirmedNoCommit` results are retried; `UnknownOutcome` is never retried.
+- Added a per-connection circuit breaker for repeated confirmed failures.
+- Added low-cardinality retry, throttle-wait, and circuit-open metrics.
+- Exposed rate and concurrency controls through Terraform and added focused retry-safety tests.
+
 ## Iteration 9 — 2026-08-06
 
 - Added OpenTelemetry traces and metrics to the Control Plane and Sync Worker with conditional Azure Monitor export.
