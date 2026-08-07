@@ -5,6 +5,8 @@ using Microsoft.EntityFrameworkCore;
 using RelayWorks.Contracts.IntegrationRuns;
 using RelayWorks.Contracts.TimeEntries;
 using RelayWorks.Sync.Worker.Persistence;
+using RelayWorks.Sync.Worker.Telemetry;
+using System.Diagnostics;
 
 namespace RelayWorks.Sync.Worker;
 
@@ -26,6 +28,12 @@ public sealed class TimeEntryProcessor(
         var destinationConnector = await destinationFactory.CreateAsync(profile, cancellationToken);
         foreach (var entry in sourceConnector.Read(command))
             reported.Add(await ProcessRecord(command, entry, profile, destinationConnector, completedAtUtc, cancellationToken));
+        foreach (var result in reported)
+        {
+            if (result.Status == nameof(RecordDeliveryState.Succeeded))
+                WorkerTelemetry.RecordsDelivered.Add(1, new("provider", profile.Provider));
+            else WorkerTelemetry.RecordsAttention.Add(1, new("provider", profile.Provider), new("status", result.Status));
+        }
 
         dbContext.InboxMessages.Add(new WorkerInboxMessage
         {
@@ -93,6 +101,7 @@ public sealed class TimeEntryProcessor(
         dbContext.RecordDeliveries.Add(delivery);
         await dbContext.SaveChangesAsync(cancellationToken);
 
+        var connectorTimer = Stopwatch.StartNew();
         var write = destinationConnector.Write(entry, destinationKey);
         var retries = 0;
         while (write.Status == DestinationWriteStatus.ConfirmedNoCommit &&
@@ -120,6 +129,9 @@ public sealed class TimeEntryProcessor(
             _ => throw new ArgumentOutOfRangeException()
         };
         delivery.Finish(state, write.DestinationReference, write.ErrorCode, write.ErrorMessage, now);
+        connectorTimer.Stop();
+        WorkerTelemetry.ConnectorDuration.Record(connectorTimer.Elapsed.TotalMilliseconds,
+            new("provider", profile.Provider), new("outcome", state.ToString()));
         return Result(entry, state, write.DestinationReference, write.ErrorCode, write.ErrorMessage, now);
     }
 

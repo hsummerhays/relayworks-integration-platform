@@ -12,6 +12,12 @@ using Microsoft.Identity.Web;
 using Microsoft.AspNetCore.Authorization;
 using System.Text.Json;
 using RelayWorks.Contracts.Connections;
+using RelayWorks.Contracts.Telemetry;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
+using Azure.Monitor.OpenTelemetry.Exporter;
+using System.Diagnostics;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -25,6 +31,20 @@ builder.Services.AddOpenApi();
 builder.Services.AddProblemDetails();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<TenantContext>();
+var applicationInsights = builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"];
+var telemetry = builder.Services.AddOpenTelemetry()
+    .ConfigureResource(resource => resource.AddService("relayworks-control-plane"))
+    .WithTracing(tracing => tracing.AddSource(TelemetryNames.ControlPlaneSource)
+        .AddAspNetCoreInstrumentation(options => options.Filter = context =>
+            !context.Request.Path.StartsWithSegments("/health"))
+        .AddHttpClientInstrumentation())
+    .WithMetrics(metrics => metrics.AddMeter(TelemetryNames.ControlPlaneMeter)
+        .AddAspNetCoreInstrumentation().AddHttpClientInstrumentation().AddRuntimeInstrumentation());
+if (!string.IsNullOrWhiteSpace(applicationInsights))
+{
+    telemetry.WithTracing(tracing => tracing.AddAzureMonitorTraceExporter(options => options.ConnectionString = applicationInsights));
+    telemetry.WithMetrics(metrics => metrics.AddAzureMonitorMetricExporter(options => options.ConnectionString = applicationInsights));
+}
 var authenticationEnabled = builder.Configuration.GetValue("Authentication:Enabled", true);
 if (authenticationEnabled)
 {
@@ -104,6 +124,8 @@ runs.MapPost("/", async (
                 request.TotalRecords,
                 connection.Snapshot()),
             cancellationToken);
+        Activity.Current?.SetTag("relayworks.run_id", result.Run.Id);
+        Activity.Current?.SetTag("relayworks.operation", request.Operation.ToString());
 
         return result.IsDuplicate
             ? Results.Ok(result)
@@ -159,6 +181,8 @@ connections.MapPost("/{connectionId:guid}/tests", async (Guid connectionId, Rela
         Action = "ConnectionTestRequested", ResourceType = "ConnectionTest", ResourceId = testId.ToString(),
         Detail = connectionId.ToString(), OccurredAtUtc = now });
     await db.SaveChangesAsync(cancellationToken);
+    Activity.Current?.SetTag("relayworks.test_id", testId);
+    Activity.Current?.SetTag("connector.provider", connection.Provider);
     return Results.Accepted($"/api/connections/{connectionId}/tests/{testId}", test);
 }).RequireAuthorization("IntegrationOperator");
 
@@ -204,6 +228,8 @@ app.MapPost("/api/reconciliation-issues/{id:guid}/resolve", async (Guid id,
         ActorId = tenantContext.RequireActorId(), Action = "ReconciliationResolved",
         ResourceType = "IntegrationRecord", ResourceId = record.Id.ToString(),
         Detail = request.ResolutionNotes.Trim(), OccurredAtUtc = timeProvider.GetUtcNow() });
+    Activity.Current?.SetTag("relayworks.record_id", record.Id);
+    Activity.Current?.SetTag("relayworks.reconciliation", "manual-resolution");
     await db.SaveChangesAsync(cancellationToken);
     return Results.Ok(record);
 }).WithTags("Reconciliation").RequireAuthorization("IntegrationOperator");
@@ -214,6 +240,18 @@ app.MapGet("/api/audit", async (RelayWorksDbContext db, TenantContext tenantCont
         .Take(200).ToListAsync(cancellationToken))).WithTags("Audit").RequireAuthorization("IntegrationAdmin");
 
 app.MapGet("/health", () => Results.Ok(new { status = "healthy", service = "control-plane" })).AllowAnonymous();
+app.MapGet("/health/ready", async (RelayWorksDbContext db, TimeProvider timeProvider, CancellationToken cancellationToken) =>
+{
+    if (!await db.Database.CanConnectAsync(cancellationToken))
+        return Results.Json(new { status = "unhealthy", dependency = "control-database" }, statusCode: 503);
+    var pending = await db.OutboxMessages.CountAsync(x => x.DispatchedAtUtc == null, cancellationToken);
+    var oldest = await db.OutboxMessages.Where(x => x.DispatchedAtUtc == null)
+        .MinAsync(x => (DateTimeOffset?)x.OccurredAtUtc, cancellationToken);
+    var lagSeconds = oldest.HasValue ? (timeProvider.GetUtcNow() - oldest.Value).TotalSeconds : 0;
+    return lagSeconds > 60
+        ? Results.Json(new { status = "degraded", dependency = "command-outbox", pending, lagSeconds }, statusCode: 503)
+        : Results.Ok(new { status = "ready", pendingOutboxMessages = pending, outboxLagSeconds = lagSeconds });
+}).AllowAnonymous();
 app.Run();
 
 public sealed record SubmitIntegrationRunRequest(

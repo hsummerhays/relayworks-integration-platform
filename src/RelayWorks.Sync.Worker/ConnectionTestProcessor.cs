@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using RelayWorks.Contracts.Connections;
 using RelayWorks.Sync.Worker.Persistence;
+using RelayWorks.Sync.Worker.Telemetry;
 
 namespace RelayWorks.Sync.Worker;
 
@@ -13,6 +14,9 @@ public sealed class ConnectionTestProcessor(ITimeEntryDestinationConnectorFactor
     {
         if (await db.InboxMessages.AnyAsync(x => x.MessageId == command.MessageId, cancellationToken)) return;
         var stopwatch = Stopwatch.StartNew();
+        using var activity = WorkerTelemetry.ActivitySource.StartActivity("connector test", ActivityKind.Client);
+        activity?.SetTag("relayworks.test_id", command.TestId);
+        activity?.SetTag("connector.provider", command.ConnectorProfile.Provider);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(30));
         string status; string? category = null; string? safeMessage;
@@ -39,6 +43,10 @@ public sealed class ConnectionTestProcessor(ITimeEntryDestinationConnectorFactor
             logger.LogWarning(exception, "Connection test {TestId} failed", command.TestId);
         }
         stopwatch.Stop(); var now = timeProvider.GetUtcNow(); var eventId = Guid.NewGuid();
+        activity?.SetTag("connector.test.status", status);
+        if (status != "Succeeded") activity?.SetStatus(ActivityStatusCode.Error, category);
+        WorkerTelemetry.ConnectorDuration.Record(stopwatch.Elapsed.TotalMilliseconds,
+            new("provider", command.ConnectorProfile.Provider), new("outcome", status));
         var result = new ConnectionTestCompletedV1(eventId, command.TestId, command.TenantId,
             command.ConnectionId, status, category, safeMessage, stopwatch.Elapsed, now);
         db.InboxMessages.Add(new WorkerInboxMessage { MessageId = command.MessageId, ProcessedAtUtc = now });

@@ -22,6 +22,14 @@ output "worker_ledger_database" {
   value = azurerm_mssql_database.worker_ledger.name
 }
 
+output "application_insights_name" {
+  value = azurerm_application_insights.main.name
+}
+
+output "operations_action_group_name" {
+  value = azurerm_monitor_action_group.operations.name
+}
+
 output "console_auth_build_settings" {
   value = {
     VITE_AUTH_ENABLED    = "true"

@@ -5,6 +5,9 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using RelayWorks.Infrastructure.Persistence;
+using RelayWorks.Infrastructure.Telemetry;
+using RelayWorks.Contracts.Telemetry;
+using System.Diagnostics;
 
 namespace RelayWorks.Infrastructure.Messaging;
 
@@ -38,6 +41,11 @@ public sealed class OutboxPublisher(
 
         foreach (var message in messages)
         {
+            using var activity = ControlPlaneTelemetry.ActivitySource.StartActivity(
+                "servicebus publish command", ActivityKind.Producer);
+            activity?.SetTag("messaging.destination.name", options.Value.CommandsQueue);
+            activity?.SetTag("messaging.message.type", message.Type);
+            activity?.SetTag("relayworks.correlation_id", MessageTelemetry.BusinessCorrelationId(message.Payload));
             try
             {
                 message.RecordAttempt();
@@ -47,12 +55,19 @@ public sealed class OutboxPublisher(
                     Subject = message.Type,
                     ContentType = "application/json"
                 };
+                busMessage.CorrelationId = MessageTelemetry.BusinessCorrelationId(message.Payload);
+                MessageTelemetry.Inject(busMessage.ApplicationProperties);
                 await sender.SendMessageAsync(busMessage, cancellationToken);
                 message.MarkDispatched(timeProvider.GetUtcNow());
+                ControlPlaneTelemetry.OutboxPublished.Add(1, new("message.type", message.Type));
+                ControlPlaneTelemetry.OutboxLag.Record((timeProvider.GetUtcNow() - message.OccurredAtUtc).TotalSeconds,
+                    new("message.type", message.Type));
             }
             catch (Exception exception)
             {
                 logger.LogError(exception, "Failed to dispatch outbox message {MessageId}", message.Id);
+                activity?.SetStatus(ActivityStatusCode.Error, exception.GetType().Name);
+                ControlPlaneTelemetry.OutboxFailures.Add(1, new("message.type", message.Type));
             }
         }
 

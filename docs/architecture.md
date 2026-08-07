@@ -45,6 +45,8 @@ sequenceDiagram
 - The Worker resolves a structured Key Vault locator once per run through a coalescing five-minute cache.
 - Vault routing can be overridden per tenant or region without changing message contracts.
 - Connection tests are durable commands executed by the Worker; the console polls their Control Plane projection.
+- W3C trace context crosses Service Bus in application properties, while run/test IDs remain explicit business correlation.
+- Low-cardinality metrics describe outbox lag, connector duration, record outcomes, and cache behavior without tenant or secret dimensions.
 
 This is not exactly-once delivery. It is an explicit duplicate-avoidance protocol with a human reconciliation path for unknowable external outcomes.
 
@@ -66,6 +68,6 @@ Terraform provisions two databases on the same private Azure SQL logical server.
 ## Remaining production work
 
 - Replace simulated adapters with FieldFlo and accounting/payroll connectors.
-- Add authentication, authorization, tenant isolation tests, and immutable resolution audit actors.
+- Add tenant-isolation and app-role integration tests.
 - Define connector-specific read-after-write and reconciliation capabilities.
-- Add OpenTelemetry, alerting, ledger retention policy, and failure-injection tests.
+- Add ledger retention policy and failure-injection tests.

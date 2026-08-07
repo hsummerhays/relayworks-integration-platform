@@ -35,3 +35,7 @@ variable "console_client_id" {
   type = string
   description = "Entra single-page application client id for the Vue console."
 }
+variable "alert_email" {
+  type = string
+  description = "Operations email receiving RelayWorks Azure Monitor alerts."
+}

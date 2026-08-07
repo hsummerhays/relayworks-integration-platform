@@ -28,6 +28,55 @@ resource "azurerm_application_insights" "main" {
   tags                = var.tags
 }
 
+resource "azurerm_monitor_action_group" "operations" {
+  name                = "ag-${local.name}-operations"
+  resource_group_name = azurerm_resource_group.main.name
+  short_name          = "relayworks"
+  tags                = var.tags
+  email_receiver {
+    name          = "operations"
+    email_address = var.alert_email
+  }
+}
+
+resource "azurerm_monitor_metric_alert" "service_bus_dead_letters" {
+  name                = "alert-${local.name}-servicebus-deadletters"
+  resource_group_name = azurerm_resource_group.main.name
+  scopes              = [azurerm_servicebus_namespace.main.id]
+  description         = "Any dead-lettered RelayWorks message requires operator review."
+  severity            = 1
+  frequency           = "PT5M"
+  window_size         = "PT5M"
+  criteria {
+    metric_namespace = "Microsoft.ServiceBus/namespaces"
+    metric_name      = "DeadletteredMessages"
+    aggregation      = "Maximum"
+    operator         = "GreaterThan"
+    threshold        = 0
+  }
+  action { action_group_id = azurerm_monitor_action_group.operations.id }
+  tags = var.tags
+}
+
+resource "azurerm_monitor_metric_alert" "application_exceptions" {
+  name                = "alert-${local.name}-application-exceptions"
+  resource_group_name = azurerm_resource_group.main.name
+  scopes              = [azurerm_application_insights.main.id]
+  description         = "RelayWorks emitted application exceptions in the last five minutes."
+  severity            = 2
+  frequency           = "PT5M"
+  window_size         = "PT5M"
+  criteria {
+    metric_namespace = "Microsoft.Insights/components"
+    metric_name      = "exceptions/count"
+    aggregation      = "Count"
+    operator         = "GreaterThan"
+    threshold        = 0
+  }
+  action { action_group_id = azurerm_monitor_action_group.operations.id }
+  tags = var.tags
+}
+
 resource "azurerm_static_web_app" "console" {
   name                = "swa-${local.name}-console"
   resource_group_name = azurerm_resource_group.main.name
@@ -304,6 +353,20 @@ resource "azurerm_container_app" "control_plane" {
       env { name = "Authentication__Enabled" value = "true" }
       env { name = "AzureAd__TenantId" value = var.tenant_id }
       env { name = "AzureAd__ClientId" value = var.control_plane_api_client_id }
+
+      liveness_probe {
+        transport        = "HTTP"
+        port             = 8080
+        path             = "/health"
+        interval_seconds = 30
+      }
+
+      readiness_probe {
+        transport        = "HTTP"
+        port             = 8080
+        path             = "/health/ready"
+        interval_seconds = 10
+      }
     }
   }
 

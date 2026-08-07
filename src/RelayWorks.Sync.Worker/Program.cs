@@ -3,9 +3,25 @@ using RelayWorks.Sync.Worker;
 using RelayWorks.Sync.Worker.Persistence;
 using Microsoft.EntityFrameworkCore;
 using RelayWorks.Sync.Worker.Secrets;
+using RelayWorks.Contracts.Telemetry;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
+using Azure.Monitor.OpenTelemetry.Exporter;
 
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddSingleton(TimeProvider.System);
+var applicationInsights = builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"];
+var telemetry = builder.Services.AddOpenTelemetry()
+    .ConfigureResource(resource => resource.AddService("relayworks-sync-worker"))
+    .WithTracing(tracing => tracing.AddSource(TelemetryNames.WorkerSource).AddHttpClientInstrumentation())
+    .WithMetrics(metrics => metrics.AddMeter(TelemetryNames.WorkerMeter, TelemetryNames.SecretMeter)
+        .AddHttpClientInstrumentation().AddRuntimeInstrumentation());
+if (!string.IsNullOrWhiteSpace(applicationInsights))
+{
+    telemetry.WithTracing(tracing => tracing.AddAzureMonitorTraceExporter(options => options.ConnectionString = applicationInsights));
+    telemetry.WithMetrics(metrics => metrics.AddAzureMonitorMetricExporter(options => options.ConnectionString = applicationInsights));
+}
 builder.Services.Configure<ServiceBusOptions>(builder.Configuration.GetSection(ServiceBusOptions.SectionName));
 builder.Services.AddSingleton(provider =>
     ServiceBusClientFactory.Create(

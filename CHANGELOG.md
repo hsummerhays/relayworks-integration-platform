@@ -1,5 +1,14 @@
 # Changelog
 
+## Iteration 9 — 2026-08-06
+
+- Added OpenTelemetry traces and metrics to the Control Plane and Sync Worker with conditional Azure Monitor export.
+- Propagated W3C trace context and business correlation IDs over Service Bus commands and events.
+- Instrumented outbox publishing and lag, message consumption, connector duration, record outcomes, and projections.
+- Added SQL and command-outbox readiness checks and Azure Container App health probes.
+- Added Azure Monitor alerts for Service Bus dead letters and application exceptions with an operations action group.
+- Added an operations runbook with KQL triage queries and explicit alert response procedures.
+
 ## Iteration 8 — 2026-08-06
 
 - Added MSAL browser authentication and silent API token acquisition to the Vue console.

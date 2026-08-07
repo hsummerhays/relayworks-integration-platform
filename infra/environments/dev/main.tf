@@ -11,6 +11,7 @@ module "relayworks" {
   sync_worker_image         = var.sync_worker_image
   control_plane_api_client_id = var.control_plane_api_client_id
   console_client_id           = var.console_client_id
+  alert_email                 = var.alert_email
 
   tags = {
     application = "relayworks"

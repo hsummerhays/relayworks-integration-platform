@@ -8,6 +8,9 @@ using RelayWorks.Contracts.IntegrationRuns;
 using Microsoft.EntityFrameworkCore;
 using RelayWorks.Infrastructure.Persistence;
 using RelayWorks.Contracts.Connections;
+using RelayWorks.Contracts.Telemetry;
+using RelayWorks.Infrastructure.Telemetry;
+using System.Diagnostics;
 
 namespace RelayWorks.Infrastructure.Messaging;
 
@@ -38,6 +41,12 @@ public sealed class IntegrationResultConsumer(
 
     private async Task ProcessMessageAsync(ProcessMessageEventArgs args)
     {
+        var parent = MessageTelemetry.Extract(args.Message.ApplicationProperties);
+        using var activity = ControlPlaneTelemetry.ActivitySource.StartActivity("servicebus project event",
+            ActivityKind.Consumer, parent);
+        activity?.SetTag("messaging.message.type", args.Message.Subject);
+        activity?.SetTag("relayworks.correlation_id", args.Message.CorrelationId);
+        activity?.SetTag("messaging.delivery_count", args.Message.DeliveryCount);
         await using var scope = scopeFactory.CreateAsyncScope();
         var repository = scope.ServiceProvider.GetRequiredService<IIntegrationRunRepository>();
 
@@ -59,6 +68,7 @@ public sealed class IntegrationResultConsumer(
                 ResourceId = result.TestId.ToString(), Detail = result.Status, OccurredAtUtc = result.OccurredAtUtc });
             await db.SaveChangesAsync(args.CancellationToken);
             await args.CompleteMessageAsync(args.Message, args.CancellationToken);
+            ControlPlaneTelemetry.EventsProjected.Add(1, new("event.type", nameof(ConnectionTestCompletedV1)));
             return;
         }
 
@@ -83,6 +93,7 @@ public sealed class IntegrationResultConsumer(
             }
             await db.SaveChangesAsync(args.CancellationToken);
             await args.CompleteMessageAsync(args.Message, args.CancellationToken);
+            ControlPlaneTelemetry.EventsProjected.Add(1, new("event.type", nameof(IntegrationRecordResultsReportedV1)));
             return;
         }
 
@@ -109,6 +120,7 @@ public sealed class IntegrationResultConsumer(
             run.Complete(result.AcceptedRecords, result.RejectedRecords, result.OccurredAtUtc);
             await repository.SaveChangesAsync(args.CancellationToken);
             await args.CompleteMessageAsync(args.Message, args.CancellationToken);
+            ControlPlaneTelemetry.EventsProjected.Add(1, new("event.type", nameof(IntegrationRunCompletedV1)));
             return;
         }
 
@@ -132,6 +144,7 @@ public sealed class IntegrationResultConsumer(
             run.Fail(timeProvider.GetUtcNow());
             await repository.SaveChangesAsync(args.CancellationToken);
             await args.CompleteMessageAsync(args.Message, args.CancellationToken);
+            ControlPlaneTelemetry.EventsProjected.Add(1, new("event.type", nameof(IntegrationRunFailedV1)));
             return;
         }
 
