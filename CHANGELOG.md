@@ -1,5 +1,13 @@
 # Changelog
 
+## Iteration 17 — 2026-08-07
+
+- Added explicit poison-command classification at the Worker broker boundary.
+- Dead-lettered unknown subjects as `UnsupportedCommandType` and malformed or incomplete supported commands as `InvalidCommandPayload` without retrying deterministic failures.
+- Kept payload contents and serializer details out of dead-letter descriptions and structured logs.
+- Extended the Service Bus emulator round trip to verify both dead-letter reasons and the absence of ledger or destination-write side effects.
+- Documented the retry-versus-dead-letter boundary in ADR 0014.
+
 ## Iteration 16 — 2026-08-07
 
 - Extended the Service Bus emulator lane through the production Control Plane result consumer.

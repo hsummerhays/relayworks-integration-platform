@@ -31,6 +31,7 @@ public sealed class ServiceBusWorkerE2ETests
         var controlSqlConnection = RequiredEnvironment("SERVICEBUS_E2E_CONTROL_SQL_CONNECTION_STRING");
         await using var bus = new ServiceBusClient(busConnection);
         await DrainAsync(bus, ObserverSubscription, TestContext.Current.CancellationToken);
+        await DrainDeadLettersAsync(bus, TestContext.Current.CancellationToken);
 
         var destination = new CountingDestination();
         var services = BuildServices(workerSqlConnection, controlSqlConnection, destination);
@@ -70,8 +71,8 @@ public sealed class ServiceBusWorkerE2ETests
 
             Assert.Contains(nameof(IntegrationRecordResultsReportedV1), firstEvents);
             Assert.Contains(nameof(IntegrationRunCompletedV1), firstEvents);
-            await AssertLedgerAsync(provider, expectedInbox: 1, expectedWrites: 1,
-                destination, TestContext.Current.CancellationToken);
+            await AssertLedgerAsync(provider, expectedInbox: 1, expectedOutbox: 2, expectedWrites: 1,
+                destination: destination, cancellationToken: TestContext.Current.CancellationToken);
             await AssertControlPlaneProjectionAsync(provider, command,
                 TestContext.Current.CancellationToken);
 
@@ -85,10 +86,22 @@ public sealed class ServiceBusWorkerE2ETests
 
             Assert.Contains(nameof(IntegrationRecordResultsReportedV1), replayEvents);
             Assert.Contains(nameof(IntegrationRunCompletedV1), replayEvents);
-            await AssertLedgerAsync(provider, expectedInbox: 2, expectedWrites: 1,
-                destination, TestContext.Current.CancellationToken);
+            await AssertLedgerAsync(provider, expectedInbox: 2, expectedOutbox: 4, expectedWrites: 1,
+                destination: destination, cancellationToken: TestContext.Current.CancellationToken);
             await AssertControlPlaneProjectionAsync(provider, command,
                 TestContext.Current.CancellationToken);
+
+            await SendRawAsync(bus, "LegacyIntegrationRunRequested", "{}",
+                TestContext.Current.CancellationToken);
+            await SendRawAsync(bus, nameof(IntegrationRunRequestedV1), "{not-json",
+                TestContext.Current.CancellationToken);
+            var deadLetterReasons = await ReceiveDeadLetterReasonsAsync(bus, 2,
+                TestContext.Current.CancellationToken);
+
+            Assert.Contains("UnsupportedCommandType", deadLetterReasons);
+            Assert.Contains("InvalidCommandPayload", deadLetterReasons);
+            await AssertLedgerAsync(provider, expectedInbox: 2, expectedOutbox: 4, expectedWrites: 1,
+                destination: destination, cancellationToken: TestContext.Current.CancellationToken);
         }
         finally
         {
@@ -171,6 +184,18 @@ public sealed class ServiceBusWorkerE2ETests
         await sender.SendMessageAsync(message, cancellationToken);
     }
 
+    private static async Task SendRawAsync(ServiceBusClient bus, string subject, string payload,
+        CancellationToken cancellationToken)
+    {
+        await using var sender = bus.CreateSender(CommandsQueue);
+        await sender.SendMessageAsync(new ServiceBusMessage(BinaryData.FromString(payload))
+        {
+            MessageId = Guid.NewGuid().ToString(),
+            Subject = subject,
+            ContentType = "application/json"
+        }, cancellationToken);
+    }
+
     private static async Task<HashSet<string>> ReceiveEventsAsync(ServiceBusClient bus, int count,
         CancellationToken cancellationToken)
     {
@@ -196,12 +221,47 @@ public sealed class ServiceBusWorkerE2ETests
         while (await receiver.ReceiveMessageAsync(TimeSpan.FromMilliseconds(250), cancellationToken) is not null) { }
     }
 
+    private static async Task DrainDeadLettersAsync(ServiceBusClient bus,
+        CancellationToken cancellationToken)
+    {
+        await using var receiver = bus.CreateReceiver(CommandsQueue,
+            new ServiceBusReceiverOptions
+            {
+                ReceiveMode = ServiceBusReceiveMode.ReceiveAndDelete,
+                SubQueue = SubQueue.DeadLetter
+            });
+        while (await receiver.ReceiveMessageAsync(TimeSpan.FromMilliseconds(250), cancellationToken) is not null) { }
+    }
+
+    private static async Task<HashSet<string>> ReceiveDeadLetterReasonsAsync(ServiceBusClient bus,
+        int count, CancellationToken cancellationToken)
+    {
+        await using var receiver = bus.CreateReceiver(CommandsQueue,
+            new ServiceBusReceiverOptions { SubQueue = SubQueue.DeadLetter });
+        var reasons = new HashSet<string>(StringComparer.Ordinal);
+        var deliveryCounts = new List<int>();
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(30);
+        while (reasons.Count < count && DateTimeOffset.UtcNow < deadline)
+        {
+            var message = await receiver.ReceiveMessageAsync(TimeSpan.FromSeconds(2), cancellationToken);
+            if (message is null) continue;
+            if (!string.IsNullOrWhiteSpace(message.DeadLetterReason)) reasons.Add(message.DeadLetterReason);
+            deliveryCounts.Add(message.DeliveryCount);
+            await receiver.CompleteMessageAsync(message, cancellationToken);
+        }
+        Assert.Equal(count, reasons.Count);
+        Assert.All(deliveryCounts, deliveryCount => Assert.Equal(1, deliveryCount));
+        return reasons;
+    }
+
     private static async Task AssertLedgerAsync(IServiceProvider provider, int expectedInbox,
-        int expectedWrites, CountingDestination destination, CancellationToken cancellationToken)
+        int expectedOutbox, int expectedWrites, CountingDestination destination,
+        CancellationToken cancellationToken)
     {
         await using var scope = provider.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<WorkerLedgerDbContext>();
         Assert.Equal(expectedInbox, await db.InboxMessages.CountAsync(cancellationToken));
+        Assert.Equal(expectedOutbox, await db.OutboxMessages.CountAsync(cancellationToken));
         Assert.Single(await db.RecordDeliveries.AsNoTracking().ToListAsync(cancellationToken));
         Assert.Equal(expectedWrites, destination.Writes);
     }

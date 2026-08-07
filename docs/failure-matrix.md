@@ -3,6 +3,7 @@
 | Failure or threat | Required behavior | Automated evidence | Remaining environment test |
 | --- | --- | --- | --- |
 | Duplicate Service Bus command | Do not call the destination twice | Unit test plus `BrokerRoundTripProjectsResultsAndPreservesTheDurableDeliveryGate` over the Service Bus Emulator | Replay a real locked message after Worker restart |
+| Unknown or malformed command | Dead-letter once with a stable safe reason and no business side effects | Service Bus emulator assertions for `UnsupportedCommandType` and `InvalidCommandPayload` | Alert and replay a corrected message from a disposable Azure namespace |
 | Timeout after destination send | Mark `UnknownOutcome`; never retry | `Never_retries_an_unknown_outcome` | Inject network loss after provider accepts request |
 | Confirmed HTTP 429/no commit | Honor `Retry-After` and retry within bound | `Retries_only_confirmed_no_commit_and_honors_retry_after` | Provider sandbox quota test |
 | Repeated confirmed failures | Open circuit and stop destination traffic | `Open_circuit_stops_calls_after_confirmed_failure_threshold` | Observe Azure Monitor circuit metric and recovery |

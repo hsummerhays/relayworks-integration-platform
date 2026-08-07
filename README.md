@@ -1,6 +1,6 @@
 # RelayWorks Integration Platform
 
-RelayWorks is a .NET and Vue reference platform for reliable construction-system integrations. Iteration 16 verifies the complete broker round trip from Worker command handling through the operator-facing Control Plane projection.
+RelayWorks is a .NET and Vue reference platform for reliable construction-system integrations. Iteration 17 hardens the complete broker round trip with explicit poison-message classification and safe dead-letter behavior.
 
 ## Implemented vertical slice
 
@@ -69,6 +69,7 @@ Both EF Core migration sets are intended to run from an approved deployment job.
 | Cursor-paged runs and records with status, connection, and date filtering | Implemented |
 | Verified Blob archival, dry-run retention, and lifecycle tiering | Implemented; destructive mode disabled by default |
 | Tenant-isolation, redelivery, retry-safety, circuit, archive-policy, and full Service Bus round-trip tests | Implemented |
+| Safe poison-command classification and dead-letter verification | Implemented |
 | Terraform Azure environment | Implemented, not applied |
 | Real vendor connectors | Planned |
 | Distributed limiter coordination and durable long-delay retries | Planned |

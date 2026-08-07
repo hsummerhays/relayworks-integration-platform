@@ -5,6 +5,7 @@ using RelayWorks.Contracts.Connections;
 using RelayWorks.Contracts.Telemetry;
 using RelayWorks.Sync.Worker.Telemetry;
 using System.Diagnostics;
+using System.Text.Json;
 
 namespace RelayWorks.Sync.Worker;
 
@@ -45,8 +46,23 @@ public sealed partial class IntegrationCommandWorker(
         activity?.SetTag("messaging.delivery_count", args.Message.DeliveryCount);
         if (args.Message.Subject == nameof(ConnectionTestRequestedV1))
         {
-            var testCommand = args.Message.Body.ToObjectFromJson<ConnectionTestRequestedV1>()
-                ?? throw new InvalidOperationException("Connection test payload was empty.");
+            ConnectionTestRequestedV1? testCommand;
+            try
+            {
+                testCommand = args.Message.Body.ToObjectFromJson<ConnectionTestRequestedV1>();
+            }
+            catch (JsonException exception)
+            {
+                await DeadLetterInvalidPayloadAsync(args, exception);
+                return;
+            }
+            if (testCommand is null || testCommand.MessageId == Guid.Empty ||
+                testCommand.TestId == Guid.Empty || testCommand.TenantId == Guid.Empty ||
+                testCommand.ConnectionId == Guid.Empty || !IsValidProfile(testCommand.ConnectorProfile))
+            {
+                await DeadLetterInvalidPayloadAsync(args, null);
+                return;
+            }
             await using var testScope = scopeFactory.CreateAsyncScope();
             await testScope.ServiceProvider.GetRequiredService<ConnectionTestProcessor>()
                 .ProcessAsync(testCommand, args.CancellationToken);
@@ -62,8 +78,24 @@ public sealed partial class IntegrationCommandWorker(
             return;
         }
 
-        var command = args.Message.Body.ToObjectFromJson<IntegrationRunRequestedV1>()
-            ?? throw new InvalidOperationException("Integration command payload was empty.");
+        IntegrationRunRequestedV1? command;
+        try
+        {
+            command = args.Message.Body.ToObjectFromJson<IntegrationRunRequestedV1>();
+        }
+        catch (JsonException exception)
+        {
+            await DeadLetterInvalidPayloadAsync(args, exception);
+            return;
+        }
+        if (command is null || command.MessageId == Guid.Empty || command.RunId == Guid.Empty ||
+            command.TenantId == Guid.Empty || command.ConnectionId == Guid.Empty ||
+            string.IsNullOrWhiteSpace(command.Operation) || command.TotalRecords is <= 0 or > 10_000 ||
+            !IsValidProfile(command.ConnectorProfile))
+        {
+            await DeadLetterInvalidPayloadAsync(args, null);
+            return;
+        }
         if (command.Operation != "TimeEntryExport")
         {
             await args.DeadLetterMessageAsync(args.Message, "UnsupportedOperation", command.Operation, args.CancellationToken);
@@ -78,6 +110,24 @@ public sealed partial class IntegrationCommandWorker(
         LogRunPersisted(logger, result.RunId, result.AcceptedRecords, result.RejectedRecords);
     }
 
+    private async Task DeadLetterInvalidPayloadAsync(ProcessMessageEventArgs args, Exception? exception)
+    {
+        LogInvalidCommandPayload(logger, exception, args.Message.Subject);
+        await args.DeadLetterMessageAsync(args.Message, "InvalidCommandPayload",
+            "The command payload is malformed or missing required fields.", args.CancellationToken);
+    }
+
+    private static bool IsValidProfile(ConnectorExecutionProfileV1? profile) =>
+        profile is not null &&
+        !string.IsNullOrWhiteSpace(profile.Provider) &&
+        !string.IsNullOrWhiteSpace(profile.ConfigurationVersion) &&
+        profile.MaxConfirmedNoCommitRetries >= 0 &&
+        profile.Secret is not null &&
+        profile.Secret.VaultUri is not null &&
+        profile.Secret.VaultUri.IsAbsoluteUri &&
+        string.Equals(profile.Secret.VaultUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) &&
+        !string.IsNullOrWhiteSpace(profile.Secret.SecretName);
+
     public async ValueTask DisposeAsync()
     {
         if (_processor is not null) await _processor.DisposeAsync();
@@ -91,4 +141,7 @@ public sealed partial class IntegrationCommandWorker(
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Persisted run {RunId}: {Accepted} accepted, {Rejected} requiring attention")]
     private static partial void LogRunPersisted(ILogger logger, Guid runId, int accepted, int rejected);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Dead-lettering invalid command payload for {CommandType}")]
+    private static partial void LogInvalidCommandPayload(ILogger logger, Exception? exception, string commandType);
 }
