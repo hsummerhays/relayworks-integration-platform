@@ -15,6 +15,8 @@ module "relayworks" {
   connector_max_concurrency   = var.connector_max_concurrency
   connector_requests_per_second = var.connector_requests_per_second
   connector_burst_capacity    = var.connector_burst_capacity
+  archive_enabled             = var.archive_enabled
+  archive_dry_run             = var.archive_dry_run
 
   tags = {
     application = "relayworks"

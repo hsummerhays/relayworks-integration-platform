@@ -86,6 +86,79 @@ resource "azurerm_static_web_app" "console" {
   tags                = var.tags
 }
 
+resource "azurerm_storage_account" "archive" {
+  name                            = substr(replace("st${local.name}archive", "-", ""), 0, 24)
+  resource_group_name             = azurerm_resource_group.main.name
+  location                        = azurerm_resource_group.main.location
+  account_tier                    = "Standard"
+  account_replication_type        = "ZRS"
+  min_tls_version                 = "TLS1_2"
+  public_network_access_enabled   = false
+  allow_nested_items_to_be_public = false
+  shared_access_key_enabled       = false
+  tags                            = var.tags
+  blob_properties {
+    versioning_enabled = true
+    delete_retention_policy { days = 30 }
+    container_delete_retention_policy { days = 30 }
+  }
+}
+
+resource "azurerm_storage_container" "history" {
+  name                  = "integration-history"
+  storage_account_id    = azurerm_storage_account.archive.id
+  container_access_type = "private"
+}
+
+resource "azurerm_storage_management_policy" "archive" {
+  storage_account_id = azurerm_storage_account.archive.id
+  rule {
+    name    = "integration-history-lifecycle"
+    enabled = true
+    filters { blob_types = ["blockBlob"] prefix_match = ["integration-history/tenant="] }
+    actions {
+      base_blob {
+        tier_to_cool_after_days_since_modification_greater_than    = 30
+        tier_to_archive_after_days_since_modification_greater_than = 90
+        delete_after_days_since_modification_greater_than          = 2555
+      }
+      snapshot { delete_after_days_since_creation_greater_than = 90 }
+      version  { delete_after_days_since_creation = 90 }
+    }
+  }
+}
+
+resource "azurerm_private_dns_zone" "blob" {
+  name                = "privatelink.blob.core.windows.net"
+  resource_group_name = azurerm_resource_group.main.name
+  tags                = var.tags
+}
+
+resource "azurerm_private_dns_zone_virtual_network_link" "blob" {
+  name                  = "blob-vnet-link"
+  resource_group_name   = azurerm_resource_group.main.name
+  private_dns_zone_name = azurerm_private_dns_zone.blob.name
+  virtual_network_id    = azurerm_virtual_network.main.id
+}
+
+resource "azurerm_private_endpoint" "archive_blob" {
+  name                = "pe-${local.name}-archive-blob"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  subnet_id           = azurerm_subnet.private_endpoints.id
+  tags                = var.tags
+  private_service_connection {
+    name                           = "archive-blob-private-connection"
+    private_connection_resource_id = azurerm_storage_account.archive.id
+    subresource_names              = ["blob"]
+    is_manual_connection           = false
+  }
+  private_dns_zone_group {
+    name                 = "archive-blob-private-dns"
+    private_dns_zone_ids = [azurerm_private_dns_zone.blob.id]
+  }
+}
+
 resource "azurerm_container_registry" "main" {
   name                = replace("acr${local.name}", "-", "")
   resource_group_name = azurerm_resource_group.main.name
@@ -287,6 +360,12 @@ resource "azurerm_role_assignment" "control_servicebus_receiver" {
   principal_id         = azurerm_user_assigned_identity.control_plane.principal_id
 }
 
+resource "azurerm_role_assignment" "control_archive_blob" {
+  scope                = azurerm_storage_account.archive.id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = azurerm_user_assigned_identity.control_plane.principal_id
+}
+
 resource "azurerm_role_assignment" "worker_servicebus_sender" {
   scope                = azurerm_servicebus_namespace.main.id
   role_definition_name = "Azure Service Bus Data Sender"
@@ -353,6 +432,9 @@ resource "azurerm_container_app" "control_plane" {
       env { name = "Authentication__Enabled" value = "true" }
       env { name = "AzureAd__TenantId" value = var.tenant_id }
       env { name = "AzureAd__ClientId" value = var.control_plane_api_client_id }
+      env { name = "Archive__Enabled" value = tostring(var.archive_enabled) }
+      env { name = "Archive__DryRun" value = tostring(var.archive_dry_run) }
+      env { name = "Archive__BlobServiceUri" value = azurerm_storage_account.archive.primary_blob_endpoint }
 
       liveness_probe {
         transport        = "HTTP"
@@ -435,6 +517,8 @@ resource "azurerm_container_app" "sync_worker" {
         name  = "ConnectorResilience__BurstCapacityPerConnection"
         value = tostring(var.connector_burst_capacity)
       }
+      env { name = "Retention__Enabled" value = "true" }
+      env { name = "Retention__DryRun" value = tostring(var.archive_dry_run) }
     }
   }
 }

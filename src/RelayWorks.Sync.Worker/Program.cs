@@ -9,6 +9,7 @@ using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Azure.Monitor.OpenTelemetry.Exporter;
 using RelayWorks.Sync.Worker.Resilience;
+using RelayWorks.Sync.Worker.Retention;
 
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddSingleton(TimeProvider.System);
@@ -42,6 +43,11 @@ builder.Services.AddOptions<ConnectorResilienceOptions>()
 builder.Services.AddSingleton<IResilienceDelay, SystemResilienceDelay>();
 builder.Services.AddSingleton<ConnectionExecutionGate>();
 builder.Services.AddSingleton<DestinationResilienceExecutor>();
+var retention = builder.Configuration.GetSection(WorkerRetentionOptions.SectionName).Get<WorkerRetentionOptions>() ?? new();
+builder.Services.AddOptions<WorkerRetentionOptions>().Bind(builder.Configuration.GetSection(WorkerRetentionOptions.SectionName))
+    .Validate(options => options.DispatchedOutboxDays >= 7 && options.CompletedInboxDays >= 30 && options.IntervalMinutes > 0,
+        "Worker retention values are outside safe bounds.").ValidateOnStart();
+if (retention.Enabled) builder.Services.AddHostedService<WorkerRetentionService>();
 builder.Services.AddScoped<ITimeEntrySourceConnector, SimulatedFieldOperationsConnector>();
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<ISecretValueProvider, KeyVaultSecretValueProvider>();

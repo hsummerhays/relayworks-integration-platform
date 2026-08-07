@@ -17,4 +17,6 @@ public static class WorkerTelemetry
     public static readonly Counter<long> ConnectorThrottled = Meter.CreateCounter<long>("relayworks.connector.throttled");
     public static readonly Counter<long> CircuitOpened = Meter.CreateCounter<long>("relayworks.connector.circuit.opened");
     public static readonly Histogram<double> ThrottleWait = Meter.CreateHistogram<double>("relayworks.connector.throttle.wait", "ms");
+    public static readonly Counter<long> RetentionRowsDeleted = Meter.CreateCounter<long>("relayworks.retention.rows.deleted");
+    public static readonly Counter<long> RetentionFailures = Meter.CreateCounter<long>("relayworks.retention.failures");
 }

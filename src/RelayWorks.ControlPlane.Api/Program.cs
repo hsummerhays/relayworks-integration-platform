@@ -18,6 +18,9 @@ using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Azure.Monitor.OpenTelemetry.Exporter;
 using System.Diagnostics;
+using Azure.Identity;
+using Azure.Storage.Blobs;
+using RelayWorks.Infrastructure.Archival;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -31,6 +34,19 @@ builder.Services.AddOpenApi();
 builder.Services.AddProblemDetails();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<TenantContext>();
+var archiveOptions = builder.Configuration.GetSection(ArchiveOptions.SectionName).Get<ArchiveOptions>() ?? new();
+builder.Services.AddOptions<ArchiveOptions>().Bind(builder.Configuration.GetSection(ArchiveOptions.SectionName))
+    .Validate(options => !options.Enabled || Uri.TryCreate(options.BlobServiceUri, UriKind.Absolute, out _),
+        "Archive:BlobServiceUri must be an absolute URI when archival is enabled.")
+    .Validate(options => options.SuccessfulRunRetentionDays >= 30 && options.BatchSize is > 0 and <= 100 &&
+        options.IntervalMinutes > 0 && options.DispatchedOutboxRetentionDays >= 7,
+        "Archive retention, batch, and interval values are outside safe bounds.").ValidateOnStart();
+if (archiveOptions.Enabled)
+{
+    builder.Services.AddSingleton(new BlobContainerClient(
+        new Uri(archiveOptions.BlobServiceUri), archiveOptions.ContainerName, new DefaultAzureCredential()));
+    builder.Services.AddHostedService<ControlPlaneArchiveWorker>();
+}
 var applicationInsights = builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"];
 var telemetry = builder.Services.AddOpenTelemetry()
     .ConfigureResource(resource => resource.AddService("relayworks-control-plane"))

@@ -52,6 +52,8 @@ sequenceDiagram
 - Repeated confirmed failures open a per-connection circuit; ambiguous outcomes still go directly to reconciliation.
 - Operator queries use tenant-prefixed composite indexes and opaque `(timestamp, ID)` keyset cursors; page size is bounded to 100.
 - Record status views are evaluated in SQL, preventing successful record histories from being downloaded merely to display exceptions.
+- Terminal run history is exported to a tenant-partitioned, versioned Blob container and verified before Control Plane deletion.
+- Unresolved outcomes are never automatically archived, and Worker delivery rows remain as durable idempotency tombstones.
 
 This is not exactly-once delivery. It is an explicit duplicate-avoidance protocol with a human reconciliation path for unknowable external outcomes.
 

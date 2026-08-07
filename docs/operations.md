@@ -22,6 +22,16 @@ A connector may translate HTTP 429 into `ConfirmedNoCommit` only when the provid
 
 Current backoff is intentionally bounded to short Worker waits. Long provider maintenance windows require durable scheduled redelivery rather than holding a Worker execution open.
 
+## Archival and retention
+
+Archival starts in dry-run mode. Review `relayworks.archive.candidates` for at least one full retention cycle before setting `Archive__DryRun=false`. An eligible run must be terminal, older than 30 days, and free of unresolved `Rejected` or `UnknownOutcome` records.
+
+For every archived run, confirm that both `<run>.json.gz` and `<run>.manifest.json` exist under the tenant/year/month partition. The manifest records schema version, row count, compressed length, SHA-256, and archive time. An `IntegrationRunArchived` system audit entry preserves the run ID and blob path after SQL removal.
+
+If an archive cycle fails before deletion, leave the SQL rows in place and rerun it; the deterministic blob path and storage versioning make replacement recoverable. If verification fails, do not manually delete SQL data. Investigate storage integrity and identity permissions first.
+
+Worker inbox and outbox cleanup never touches the delivery ledger. Unprocessed outbox rows, active runs, unresolved records, and delivery tombstones are outside automated deletion.
+
 ## Application Insights queries
 
 The workspace-based Application Insights resource stores OpenTelemetry data in the `App*` tables. Adjust the time range before incident review.

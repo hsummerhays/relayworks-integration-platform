@@ -1,5 +1,16 @@
 # Changelog
 
+## Iteration 12 — 2026-08-07
+
+- Added a Control Plane archival worker with dry-run mode and safe minimum retention validation.
+- Exported eligible terminal runs and record projections as compressed, schema-versioned JSON in tenant/year/month Blob partitions.
+- Added SHA-256 and byte-length verification plus a separate manifest before SQL deletion.
+- Excluded active runs and every run containing unresolved rejected or unknown-outcome records.
+- Added conservative cleanup for dispatched outboxes and completed Worker inbox rows.
+- Preserved the Worker delivery ledger as the long-lived duplicate-prevention tombstone.
+- Provisioned private, managed-identity-only Azure Blob storage with versioning, soft delete, and cool/archive lifecycle tiers.
+- Added archive/retention metrics, system audit records, Terraform controls, ADR 0013, and recovery guidance.
+
 ## Iteration 11 — 2026-08-07
 
 - Replaced the implicit 200-run cap with explicit cursor-paged response envelopes.

@@ -35,6 +35,8 @@ variable "alert_email" { type = string }
 variable "connector_max_concurrency" { type = number default = 2 }
 variable "connector_requests_per_second" { type = number default = 5 }
 variable "connector_burst_capacity" { type = number default = 5 }
+variable "archive_enabled" { type = bool default = true }
+variable "archive_dry_run" { type = bool default = true }
 
 variable "tags" {
   type = map(string)

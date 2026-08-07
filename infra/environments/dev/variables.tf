@@ -54,3 +54,9 @@ variable "connector_burst_capacity" {
   description = "Token-bucket burst capacity for one connection profile."
   default     = 5
 }
+variable "archive_enabled" { type = bool default = true }
+variable "archive_dry_run" {
+  type        = bool
+  description = "Discover archive candidates without uploading or deleting rows."
+  default     = true
+}

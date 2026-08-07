@@ -30,6 +30,10 @@ output "operations_action_group_name" {
   value = azurerm_monitor_action_group.operations.name
 }
 
+output "archive_storage_account_name" {
+  value = azurerm_storage_account.archive.name
+}
+
 output "console_auth_build_settings" {
   value = {
     VITE_AUTH_ENABLED    = "true"
