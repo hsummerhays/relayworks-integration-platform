@@ -29,6 +29,7 @@ jobs:
       MSSQL_SA_PASSWORD: RelayWorks-E2E-Sql-2026!
       SERVICEBUS_EMULATOR_CONNECTION_STRING: Endpoint=sb://localhost;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;
       SERVICEBUS_E2E_SQL_CONNECTION_STRING: Server=localhost,1433;Database=RelayWorksWorkerE2E;User Id=sa;Password=RelayWorks-E2E-Sql-2026!;TrustServerCertificate=True
+      SERVICEBUS_E2E_CONTROL_SQL_CONNECTION_STRING: Server=localhost,1433;Database=RelayWorksControlE2E;User Id=sa;Password=RelayWorks-E2E-Sql-2026!;TrustServerCertificate=True
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4

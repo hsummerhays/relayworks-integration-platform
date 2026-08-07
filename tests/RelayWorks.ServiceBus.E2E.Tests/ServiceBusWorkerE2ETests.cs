@@ -3,10 +3,17 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using RelayWorks.Application.Abstractions;
 using RelayWorks.Contracts.IntegrationRuns;
+using RelayWorks.Domain.IntegrationRuns;
+using RelayWorks.Infrastructure.IntegrationRuns;
+using RelayWorks.Infrastructure.Messaging;
+using RelayWorks.Infrastructure.Persistence;
 using RelayWorks.Sync.Worker;
 using RelayWorks.Sync.Worker.Persistence;
 using RelayWorks.Sync.Worker.Resilience;
+using ControlPlaneServiceBusOptions = RelayWorks.Infrastructure.Messaging.ServiceBusOptions;
+using WorkerServiceBusOptions = RelayWorks.Sync.Worker.ServiceBusOptions;
 
 namespace RelayWorks.ServiceBus.E2E.Tests;
 
@@ -17,35 +24,47 @@ public sealed class ServiceBusWorkerE2ETests
     private const string ObserverSubscription = "e2e-observer";
 
     [Fact(Timeout = 120_000)]
-    public async Task BrokerRedeliveryPreservesTheDurableDeliveryGate()
+    public async Task BrokerRoundTripProjectsResultsAndPreservesTheDurableDeliveryGate()
     {
         var busConnection = RequiredEnvironment("SERVICEBUS_EMULATOR_CONNECTION_STRING");
-        var sqlConnection = RequiredEnvironment("SERVICEBUS_E2E_SQL_CONNECTION_STRING");
+        var workerSqlConnection = RequiredEnvironment("SERVICEBUS_E2E_SQL_CONNECTION_STRING");
+        var controlSqlConnection = RequiredEnvironment("SERVICEBUS_E2E_CONTROL_SQL_CONNECTION_STRING");
         await using var bus = new ServiceBusClient(busConnection);
         await DrainAsync(bus, ObserverSubscription, TestContext.Current.CancellationToken);
 
         var destination = new CountingDestination();
-        var services = BuildServices(sqlConnection, destination);
+        var services = BuildServices(workerSqlConnection, controlSqlConnection, destination);
         await using var provider = services.BuildServiceProvider();
-        await ResetDatabaseAsync(provider, TestContext.Current.CancellationToken);
+        await ResetDatabasesAsync(provider, TestContext.Current.CancellationToken);
 
-        var options = Options.Create(new ServiceBusOptions
+        var workerOptions = Options.Create(new WorkerServiceBusOptions
         {
             ConnectionString = busConnection,
             CommandsQueue = CommandsQueue,
             EventsTopic = EventsTopic
         });
+        var controlOptions = Options.Create(new ControlPlaneServiceBusOptions
+        {
+            ConnectionString = busConnection,
+            CommandsQueue = CommandsQueue,
+            EventsTopic = EventsTopic,
+            EventsSubscription = "control-plane"
+        });
         await using var commandWorker = new IntegrationCommandWorker(
-            provider.GetRequiredService<IServiceScopeFactory>(), bus, options,
+            provider.GetRequiredService<IServiceScopeFactory>(), bus, workerOptions,
             TimeProvider.System, NullLogger<IntegrationCommandWorker>.Instance);
         var outboxPublisher = new WorkerOutboxPublisher(
-            provider.GetRequiredService<IServiceScopeFactory>(), bus, options);
+            provider.GetRequiredService<IServiceScopeFactory>(), bus, workerOptions);
+        await using var resultConsumer = new IntegrationResultConsumer(
+            provider.GetRequiredService<IServiceScopeFactory>(), bus, controlOptions,
+            TimeProvider.System, NullLogger<IntegrationResultConsumer>.Instance);
 
         await commandWorker.StartAsync(TestContext.Current.CancellationToken);
         await outboxPublisher.StartAsync(TestContext.Current.CancellationToken);
+        await resultConsumer.StartAsync(TestContext.Current.CancellationToken);
         try
         {
-            var command = BuildCommand();
+            var command = await SeedRunAsync(provider, TestContext.Current.CancellationToken);
             await SendAsync(bus, command, TestContext.Current.CancellationToken);
             var firstEvents = await ReceiveEventsAsync(bus, 2, TestContext.Current.CancellationToken);
 
@@ -53,6 +72,8 @@ public sealed class ServiceBusWorkerE2ETests
             Assert.Contains(nameof(IntegrationRunCompletedV1), firstEvents);
             await AssertLedgerAsync(provider, expectedInbox: 1, expectedWrites: 1,
                 destination, TestContext.Current.CancellationToken);
+            await AssertControlPlaneProjectionAsync(provider, command,
+                TestContext.Current.CancellationToken);
 
             // A broker redelivery retains the command MessageId even if the envelope is recreated.
             await SendAsync(bus, command, TestContext.Current.CancellationToken);
@@ -66,16 +87,20 @@ public sealed class ServiceBusWorkerE2ETests
             Assert.Contains(nameof(IntegrationRunCompletedV1), replayEvents);
             await AssertLedgerAsync(provider, expectedInbox: 2, expectedWrites: 1,
                 destination, TestContext.Current.CancellationToken);
+            await AssertControlPlaneProjectionAsync(provider, command,
+                TestContext.Current.CancellationToken);
         }
         finally
         {
+            await resultConsumer.StopAsync(CancellationToken.None);
             await commandWorker.StopAsync(CancellationToken.None);
             await outboxPublisher.StopAsync(CancellationToken.None);
             outboxPublisher.Dispose();
         }
     }
 
-    private static IServiceCollection BuildServices(string sqlConnection, CountingDestination destination)
+    private static IServiceCollection BuildServices(string workerSqlConnection,
+        string controlSqlConnection, CountingDestination destination)
     {
         var resilienceOptions = Options.Create(new ConnectorResilienceOptions
         {
@@ -90,7 +115,10 @@ public sealed class ServiceBusWorkerE2ETests
         var delay = new NoDelay();
         return new ServiceCollection()
             .AddLogging()
-            .AddDbContext<WorkerLedgerDbContext>(options => options.UseSqlServer(sqlConnection))
+            .AddSingleton(TimeProvider.System)
+            .AddDbContext<WorkerLedgerDbContext>(options => options.UseSqlServer(workerSqlConnection))
+            .AddDbContext<RelayWorksDbContext>(options => options.UseSqlServer(controlSqlConnection))
+            .AddScoped<IIntegrationRunRepository, SqlIntegrationRunRepository>()
             .AddScoped<ITimeEntrySourceConnector, SimulatedFieldOperationsConnector>()
             .AddSingleton<ITimeEntryDestinationConnectorFactory>(new FixedConnectorFactory(destination))
             .AddSingleton<IOptions<ConnectorResilienceOptions>>(resilienceOptions)
@@ -100,19 +128,34 @@ public sealed class ServiceBusWorkerE2ETests
             .AddScoped<TimeEntryProcessor>();
     }
 
-    private static async Task ResetDatabaseAsync(IServiceProvider provider, CancellationToken cancellationToken)
+    private static async Task ResetDatabasesAsync(IServiceProvider provider, CancellationToken cancellationToken)
     {
         await using var scope = provider.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<WorkerLedgerDbContext>();
-        await db.Database.EnsureDeletedAsync(cancellationToken);
-        await db.Database.EnsureCreatedAsync(cancellationToken);
+        var workerDb = scope.ServiceProvider.GetRequiredService<WorkerLedgerDbContext>();
+        await workerDb.Database.EnsureDeletedAsync(cancellationToken);
+        await workerDb.Database.MigrateAsync(cancellationToken);
+        var controlDb = scope.ServiceProvider.GetRequiredService<RelayWorksDbContext>();
+        await controlDb.Database.EnsureDeletedAsync(cancellationToken);
+        await controlDb.Database.MigrateAsync(cancellationToken);
     }
 
-    private static IntegrationRunRequestedV1 BuildCommand() => new(
-        Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "TimeEntryExport", 1,
-        DateTimeOffset.UtcNow,
-        new ConnectorExecutionProfileV1("E2E", true, false, 0, "e2e-v1",
-            new SecretLocatorV1(new Uri("https://e2e.invalid"), "unused")));
+    private static async Task<IntegrationRunRequestedV1> SeedRunAsync(IServiceProvider provider,
+        CancellationToken cancellationToken)
+    {
+        var tenantId = Guid.NewGuid();
+        var connectionId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        var run = IntegrationRun.Create(tenantId, connectionId, IntegrationOperation.TimeEntryExport,
+            $"e2e-{Guid.NewGuid():N}", 1, now);
+        await using var scope = provider.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<RelayWorksDbContext>();
+        db.IntegrationRuns.Add(run);
+        await db.SaveChangesAsync(cancellationToken);
+        return new IntegrationRunRequestedV1(
+            Guid.NewGuid(), run.Id, tenantId, connectionId, "TimeEntryExport", 1, now,
+            new ConnectorExecutionProfileV1("E2E", true, false, 0, "e2e-v1",
+                new SecretLocatorV1(new Uri("https://e2e.invalid"), "unused")));
+    }
 
     private static async Task SendAsync(ServiceBusClient bus, IntegrationRunRequestedV1 command,
         CancellationToken cancellationToken)
@@ -161,6 +204,30 @@ public sealed class ServiceBusWorkerE2ETests
         Assert.Equal(expectedInbox, await db.InboxMessages.CountAsync(cancellationToken));
         Assert.Single(await db.RecordDeliveries.AsNoTracking().ToListAsync(cancellationToken));
         Assert.Equal(expectedWrites, destination.Writes);
+    }
+
+    private static async Task AssertControlPlaneProjectionAsync(IServiceProvider provider,
+        IntegrationRunRequestedV1 command, CancellationToken cancellationToken)
+    {
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(30);
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            await using var scope = provider.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<RelayWorksDbContext>();
+            var run = await db.IntegrationRuns.AsNoTracking()
+                .SingleAsync(value => value.Id == command.RunId, cancellationToken);
+            var records = await db.IntegrationRecordProjections.AsNoTracking()
+                .Where(value => value.RunId == command.RunId).ToListAsync(cancellationToken);
+            if (run.Status == IntegrationRunStatus.Completed && records.Count == 1)
+            {
+                Assert.Equal(1, run.AcceptedRecords);
+                Assert.Equal(0, run.RejectedRecords);
+                Assert.Equal(nameof(RecordDeliveryState.Succeeded), records[0].Status);
+                return;
+            }
+            await Task.Delay(TimeSpan.FromMilliseconds(250), cancellationToken);
+        }
+        throw new TimeoutException("Control Plane did not project the Worker result within 30 seconds.");
     }
 
     private static string RequiredEnvironment(string name) =>

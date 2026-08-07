@@ -2,7 +2,7 @@
 
 | Failure or threat | Required behavior | Automated evidence | Remaining environment test |
 | --- | --- | --- | --- |
-| Duplicate Service Bus command | Do not call the destination twice | Unit test plus `BrokerRedeliveryPreservesTheDurableDeliveryGate` over the Service Bus Emulator | Replay a real locked message after Worker restart |
+| Duplicate Service Bus command | Do not call the destination twice | Unit test plus `BrokerRoundTripProjectsResultsAndPreservesTheDurableDeliveryGate` over the Service Bus Emulator | Replay a real locked message after Worker restart |
 | Timeout after destination send | Mark `UnknownOutcome`; never retry | `Never_retries_an_unknown_outcome` | Inject network loss after provider accepts request |
 | Confirmed HTTP 429/no commit | Honor `Retry-After` and retry within bound | `Retries_only_confirmed_no_commit_and_honors_retry_after` | Provider sandbox quota test |
 | Repeated confirmed failures | Open circuit and stop destination traffic | `Open_circuit_stops_calls_after_confirmed_failure_threshold` | Observe Azure Monitor circuit metric and recovery |
@@ -24,4 +24,4 @@ The CI workflow restores, builds, and tests the complete solution before separat
 
 ## Service Bus end-to-end lane
 
-The separate `service-bus-e2e.yml` workflow starts the Azure Service Bus Emulator and its SQL Server dependency, executes the production Worker command consumer and outbox publisher, and verifies inbox, delivery-ledger, result-event, completion-event, and redelivery behavior. It remains outside the fast unit-test lane. A deployed-environment drill is still required to validate Azure Service Bus lock loss, managed identity, networking, and restart behavior that the emulator does not reproduce.
+The separate `service-bus-e2e.yml` workflow starts the Azure Service Bus Emulator and its SQL Server dependency; executes the production Worker command consumer, Worker outbox publisher, and Control Plane result consumer; and verifies the command inbox, delivery ledger, result events, completion event, terminal run, record projection, and redelivery behavior. It remains outside the fast unit-test lane. A deployed-environment drill is still required to validate Azure Service Bus lock loss, managed identity, networking, and restart behavior that the emulator does not reproduce.

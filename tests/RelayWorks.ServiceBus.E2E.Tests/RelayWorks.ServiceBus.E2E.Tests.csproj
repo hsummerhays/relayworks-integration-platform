@@ -9,6 +9,7 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="../../src/RelayWorks.Infrastructure/RelayWorks.Infrastructure.csproj" />
     <ProjectReference Include="../../src/RelayWorks.Sync.Worker/RelayWorks.Sync.Worker.csproj" />
   </ItemGroup>
 </Project>

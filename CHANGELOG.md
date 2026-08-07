@@ -1,5 +1,12 @@
 # Changelog
 
+## Iteration 16 — 2026-08-07
+
+- Extended the Service Bus emulator lane through the production Control Plane result consumer.
+- Added a separate relational Control Plane database to the E2E topology and seeded the source run before command delivery.
+- Verified that Worker record and completion events create the operator record projection and transition the run to `Completed` with exact accepted/rejected totals.
+- Replayed the logical work through both the command inbox and durable record ledger while confirming the Control Plane projection remains idempotent.
+
 ## Iteration 15 — 2026-08-07
 
 - Added a dedicated Azure Service Bus Emulator end-to-end test lane, isolated from the fast unit-test suite.
