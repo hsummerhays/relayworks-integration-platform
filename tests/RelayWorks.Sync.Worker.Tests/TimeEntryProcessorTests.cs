@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using RelayWorks.Contracts.IntegrationRuns;
 using RelayWorks.Sync.Worker;
@@ -17,14 +18,14 @@ public sealed class TimeEntryProcessorTests
         await using var db = new WorkerLedgerDbContext(options);
         var processor = new TimeEntryProcessor(new SimulatedFieldOperationsConnector(),
             new FixedConnectorFactory(new SimulatedAccountingConnector()), db, Resilience());
-        var now = DateTimeOffset.Parse("2026-08-06T12:00:00Z");
+        var now = DateTimeOffset.Parse("2026-08-06T12:00:00Z", CultureInfo.InvariantCulture);
         var command = new IntegrationRunRequestedV1(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
             Guid.NewGuid(), "TimeEntryExport", 17, now,
             new ConnectorExecutionProfileV1("SimulatedAccounting", true, true, 2, "test-v1",
                 new SecretLocatorV1(new Uri("https://test.vault.azure.net"), "accounting")));
 
-        var result = await processor.ProcessAsync(command, now.AddMinutes(1), default);
-        var recovered = await db.RecordDeliveries.SingleAsync(x => x.SourceRecordId == "time-000017");
+        var result = await processor.ProcessAsync(command, now.AddMinutes(1), TestContext.Current.CancellationToken);
+        var recovered = await db.RecordDeliveries.SingleAsync(x => x.SourceRecordId == "time-000017", TestContext.Current.CancellationToken);
 
         Assert.Equal(15, result.AcceptedRecords);
         Assert.Equal(RecordDeliveryState.Succeeded, recovered.State);
@@ -41,12 +42,12 @@ public sealed class TimeEntryProcessorTests
         var processor = new TimeEntryProcessor(new SimulatedFieldOperationsConnector(),
             new FixedConnectorFactory(destination), db, Resilience());
         var command = new IntegrationRunRequestedV1(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
-            Guid.NewGuid(), "TimeEntryExport", 3, DateTimeOffset.Parse("2026-08-06T12:00:00Z"),
+            Guid.NewGuid(), "TimeEntryExport", 3, DateTimeOffset.Parse("2026-08-06T12:00:00Z", CultureInfo.InvariantCulture),
             new ConnectorExecutionProfileV1("Test", true, false, 0, "test-v1",
                 new SecretLocatorV1(new Uri("https://test.vault.azure.net"), "accounting")));
 
-        var first = await processor.ProcessAsync(command, command.OccurredAtUtc.AddMinutes(1), default);
-        var second = await processor.ProcessAsync(command, command.OccurredAtUtc.AddMinutes(2), default);
+        var first = await processor.ProcessAsync(command, command.OccurredAtUtc.AddMinutes(1), TestContext.Current.CancellationToken);
+        var second = await processor.ProcessAsync(command, command.OccurredAtUtc.AddMinutes(2), TestContext.Current.CancellationToken);
 
         Assert.Equal(3, first.AcceptedRecords);
         Assert.Equal(3, second.AcceptedRecords);

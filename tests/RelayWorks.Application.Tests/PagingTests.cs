@@ -1,3 +1,4 @@
+using System.Globalization;
 using RelayWorks.Application.Abstractions;
 using RelayWorks.Application.IntegrationRuns;
 using RelayWorks.Domain.IntegrationRuns;
@@ -9,7 +10,7 @@ public sealed class PagingTests
     [Fact]
     public void Cursor_round_trips_timestamp_and_id()
     {
-        var timestamp = DateTimeOffset.Parse("2026-08-07T12:34:56.789Z");
+        var timestamp = DateTimeOffset.Parse("2026-08-07T12:34:56.789Z", CultureInfo.InvariantCulture);
         var id = Guid.NewGuid();
 
         var valid = PageCursor.TryDecode(PageCursor.Encode(timestamp, id), out var decodedTime, out var decodedId);
@@ -25,11 +26,11 @@ public sealed class PagingTests
         var tenant = Guid.NewGuid(); var connection = Guid.NewGuid();
         var rows = Enumerable.Range(0, 3).Select(index => IntegrationRun.Create(tenant, connection,
             IntegrationOperation.TimeEntryExport, $"key-{index}", 1,
-            DateTimeOffset.Parse("2026-08-07T12:00:00Z").AddMinutes(-index))).ToList();
+            DateTimeOffset.Parse("2026-08-07T12:00:00Z", CultureInfo.InvariantCulture).AddMinutes(-index))).ToList();
         var handler = new ListIntegrationRunsHandler(new FakeRepository(rows));
 
         var result = await handler.HandleAsync(new IntegrationRunQuery(tenant, null, null, null, null,
-            2, null, null), default);
+            2, null, null), TestContext.Current.CancellationToken);
 
         Assert.Equal(2, result.Items.Count);
         Assert.NotNull(result.NextCursor);

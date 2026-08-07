@@ -14,7 +14,7 @@ using System.Diagnostics;
 
 namespace RelayWorks.Infrastructure.Messaging;
 
-public sealed class IntegrationResultConsumer(
+public sealed partial class IntegrationResultConsumer(
     IServiceScopeFactory scopeFactory,
     ServiceBusClient serviceBusClient,
     IOptions<ServiceBusOptions> options,
@@ -68,7 +68,7 @@ public sealed class IntegrationResultConsumer(
                 ResourceId = result.TestId.ToString(), Detail = result.Status, OccurredAtUtc = result.OccurredAtUtc });
             await db.SaveChangesAsync(args.CancellationToken);
             await args.CompleteMessageAsync(args.Message, args.CancellationToken);
-            ControlPlaneTelemetry.EventsProjected.Add(1, new("event.type", nameof(ConnectionTestCompletedV1)));
+            ControlPlaneTelemetry.EventsProjected.Add(1, new KeyValuePair<string, object?>("event.type", nameof(ConnectionTestCompletedV1)));
             return;
         }
 
@@ -93,7 +93,7 @@ public sealed class IntegrationResultConsumer(
             }
             await db.SaveChangesAsync(args.CancellationToken);
             await args.CompleteMessageAsync(args.Message, args.CancellationToken);
-            ControlPlaneTelemetry.EventsProjected.Add(1, new("event.type", nameof(IntegrationRecordResultsReportedV1)));
+            ControlPlaneTelemetry.EventsProjected.Add(1, new KeyValuePair<string, object?>("event.type", nameof(IntegrationRecordResultsReportedV1)));
             return;
         }
 
@@ -104,7 +104,7 @@ public sealed class IntegrationResultConsumer(
             var run = await repository.FindByIdAsync(result.RunId, args.CancellationToken);
             if (run is null)
             {
-                logger.LogWarning("Completion received for unknown run {RunId}", result.RunId);
+                LogUnknownRunCompletion(logger, result.RunId);
                 await args.DeadLetterMessageAsync(args.Message, "UnknownRun", cancellationToken: args.CancellationToken);
                 return;
             }
@@ -120,7 +120,7 @@ public sealed class IntegrationResultConsumer(
             run.Complete(result.AcceptedRecords, result.RejectedRecords, result.OccurredAtUtc);
             await repository.SaveChangesAsync(args.CancellationToken);
             await args.CompleteMessageAsync(args.Message, args.CancellationToken);
-            ControlPlaneTelemetry.EventsProjected.Add(1, new("event.type", nameof(IntegrationRunCompletedV1)));
+            ControlPlaneTelemetry.EventsProjected.Add(1, new KeyValuePair<string, object?>("event.type", nameof(IntegrationRunCompletedV1)));
             return;
         }
 
@@ -144,7 +144,7 @@ public sealed class IntegrationResultConsumer(
             run.Fail(timeProvider.GetUtcNow());
             await repository.SaveChangesAsync(args.CancellationToken);
             await args.CompleteMessageAsync(args.Message, args.CancellationToken);
-            ControlPlaneTelemetry.EventsProjected.Add(1, new("event.type", nameof(IntegrationRunFailedV1)));
+            ControlPlaneTelemetry.EventsProjected.Add(1, new KeyValuePair<string, object?>("event.type", nameof(IntegrationRunFailedV1)));
             return;
         }
 
@@ -153,7 +153,7 @@ public sealed class IntegrationResultConsumer(
 
     private Task ProcessErrorAsync(ProcessErrorEventArgs args)
     {
-        logger.LogError(args.Exception, "Service Bus result consumer failed at {ErrorSource}", args.ErrorSource);
+        LogConsumerError(logger, args.Exception, args.ErrorSource);
         return Task.CompletedTask;
     }
 
@@ -161,4 +161,10 @@ public sealed class IntegrationResultConsumer(
     {
         if (_processor is not null) await _processor.DisposeAsync();
     }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Completion received for unknown run {RunId}")]
+    private static partial void LogUnknownRunCompletion(ILogger logger, Guid runId);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Service Bus result consumer failed at {ErrorSource}")]
+    private static partial void LogConsumerError(ILogger logger, Exception exception, ServiceBusErrorSource errorSource);
 }

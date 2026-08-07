@@ -23,8 +23,8 @@ public sealed class ConnectionExecutionGate(IOptions<ConnectorResilienceOptions>
             timer.Stop();
             if (timer.ElapsedMilliseconds > 0)
             {
-                WorkerTelemetry.ConnectorThrottled.Add(1, new("provider", provider));
-                WorkerTelemetry.ThrottleWait.Record(timer.Elapsed.TotalMilliseconds, new("provider", provider));
+                WorkerTelemetry.ConnectorThrottled.Add(1, new KeyValuePair<string, object?>("provider", provider));
+                WorkerTelemetry.ThrottleWait.Record(timer.Elapsed.TotalMilliseconds, new KeyValuePair<string, object?>("provider", provider));
             }
             return await operation(cancellationToken);
         }

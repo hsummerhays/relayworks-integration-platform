@@ -1,17 +1,22 @@
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Data;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using RelayWorks.Domain.IntegrationRuns;
 using RelayWorks.Infrastructure.Persistence;
 using RelayWorks.Infrastructure.Telemetry;
+using RelayWorks.Contracts.IntegrationRuns;
 
 namespace RelayWorks.Infrastructure.Archival;
 
-public sealed class ControlPlaneArchiveWorker(IServiceScopeFactory scopeFactory,
+public sealed partial class ControlPlaneArchiveWorker(IServiceScopeFactory scopeFactory,
     BlobContainerClient container, IOptions<ArchiveOptions> options, TimeProvider timeProvider,
     ILogger<ControlPlaneArchiveWorker> logger) : BackgroundService
 {
@@ -24,7 +29,7 @@ public sealed class ControlPlaneArchiveWorker(IServiceScopeFactory scopeFactory,
         {
             try { await ArchiveBatchAsync(stoppingToken); }
             catch (Exception exception) when (!stoppingToken.IsCancellationRequested)
-            { logger.LogError(exception, "Control Plane archive cycle failed"); ControlPlaneTelemetry.ArchiveFailures.Add(1); }
+            { LogArchiveCycleFailed(logger, exception); ControlPlaneTelemetry.ArchiveFailures.Add(1); }
             await Task.Delay(TimeSpan.FromMinutes(_options.IntervalMinutes), stoppingToken);
         }
     }
@@ -39,20 +44,23 @@ public sealed class ControlPlaneArchiveWorker(IServiceScopeFactory scopeFactory,
                 (run.Status == IntegrationRunStatus.Completed || run.Status == IntegrationRunStatus.CompletedWithErrors ||
                  run.Status == IntegrationRunStatus.Failed) &&
                 !db.IntegrationRecordProjections.Any(record => record.RunId == run.Id &&
-                    (record.Status == "UnknownOutcome" || record.Status == "Rejected")))
+                    (record.Status == IntegrationRecordStatuses.UnknownOutcome || record.Status == IntegrationRecordStatuses.Rejected)))
             .OrderBy(run => run.CompletedAtUtc).Take(_options.BatchSize).ToListAsync(cancellationToken);
 
         if (_options.DryRun)
         {
-            logger.LogInformation("Archive dry run found {CandidateCount} eligible terminal runs before {Cutoff}", candidates.Count, cutoff);
+            LogArchiveDryRun(logger, candidates.Count, cutoff);
             ControlPlaneTelemetry.ArchiveCandidates.Add(candidates.Count); return;
         }
 
         foreach (var run in candidates)
         {
+            if (!ArchivePolicy.IsRunEligible(run.Status, run.CompletedAtUtc, cutoff)) continue;
             var records = await db.IntegrationRecordProjections.AsNoTracking()
                 .Where(record => record.RunId == run.Id && record.TenantId == run.TenantId)
                 .OrderBy(record => record.Id).ToListAsync(cancellationToken);
+            if (!ArchivePolicy.AreRecordsEligible(records.Select(record => record.Status)))
+                continue;
             var payload = new ArchivePayload(1, run, records, timeProvider.GetUtcNow());
             await using var compressed = new MemoryStream();
             await using (var gzip = new GZipStream(compressed, CompressionLevel.SmallestSize, leaveOpen: true))
@@ -77,7 +85,15 @@ public sealed class ControlPlaneArchiveWorker(IServiceScopeFactory scopeFactory,
                 .UploadAsync(BinaryData.FromObjectAsJson(manifest), overwrite: true,
                     cancellationToken: cancellationToken);
 
-            await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+            await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+            var stillEligible = await db.IntegrationRuns.AsNoTracking().AnyAsync(candidate => candidate.Id == run.Id &&
+                candidate.TenantId == run.TenantId && candidate.CompletedAtUtc < cutoff &&
+                (candidate.Status == IntegrationRunStatus.Completed || candidate.Status == IntegrationRunStatus.CompletedWithErrors ||
+                 candidate.Status == IntegrationRunStatus.Failed) &&
+                !db.IntegrationRecordProjections.Any(record => record.RunId == candidate.Id &&
+                    (record.Status == IntegrationRecordStatuses.Rejected ||
+                     record.Status == IntegrationRecordStatuses.UnknownOutcome)), cancellationToken);
+            if (!stillEligible) { await transaction.RollbackAsync(cancellationToken); continue; }
             await db.IntegrationRecordProjections.Where(record => record.RunId == run.Id).ExecuteDeleteAsync(cancellationToken);
             await db.IntegrationRuns.Where(candidate => candidate.Id == run.Id && candidate.TenantId == run.TenantId)
                 .ExecuteDeleteAsync(cancellationToken);
@@ -94,8 +110,14 @@ public sealed class ControlPlaneArchiveWorker(IServiceScopeFactory scopeFactory,
         var outboxCutoff = timeProvider.GetUtcNow().AddDays(-_options.DispatchedOutboxRetentionDays);
         var deleted = await db.OutboxMessages.Where(message => message.DispatchedAtUtc < outboxCutoff)
             .ExecuteDeleteAsync(cancellationToken);
-        ControlPlaneTelemetry.RetentionRowsDeleted.Add(deleted, new("table", "control-outbox"));
+        ControlPlaneTelemetry.RetentionRowsDeleted.Add(deleted, new KeyValuePair<string, object?>("table", "control-outbox"));
     }
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Control Plane archive cycle failed")]
+    private static partial void LogArchiveCycleFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Archive dry run found {CandidateCount} eligible terminal runs before {Cutoff}")]
+    private static partial void LogArchiveDryRun(ILogger logger, int candidateCount, DateTimeOffset cutoff);
 
     private sealed record ArchivePayload(int SchemaVersion, IntegrationRun Run,
         IReadOnlyList<IntegrationRecordProjection> Records, DateTimeOffset ArchivedAtUtc);

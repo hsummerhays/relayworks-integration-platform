@@ -21,10 +21,10 @@ public sealed class ConnectionTestProcessorTests
             Guid.NewGuid(), new ConnectorExecutionProfileV1("Test", true, true, 0, "v1",
                 new SecretLocatorV1(new Uri("https://test.vault.azure.net"), "credential")), DateTimeOffset.UtcNow);
 
-        await processor.ProcessAsync(command, default);
+        await processor.ProcessAsync(command, TestContext.Current.CancellationToken);
 
-        Assert.True(await db.InboxMessages.AnyAsync(x => x.MessageId == command.MessageId));
-        Assert.Equal(nameof(ConnectionTestCompletedV1), (await db.OutboxMessages.SingleAsync()).Type);
+        Assert.True(await db.InboxMessages.AnyAsync(x => x.MessageId == command.MessageId, TestContext.Current.CancellationToken));
+        Assert.Equal(nameof(ConnectionTestCompletedV1), (await db.OutboxMessages.SingleAsync(TestContext.Current.CancellationToken)).Type);
     }
 
     private sealed class Factory : ITimeEntryDestinationConnectorFactory

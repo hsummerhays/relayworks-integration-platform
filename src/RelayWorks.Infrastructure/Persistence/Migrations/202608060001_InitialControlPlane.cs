@@ -7,6 +7,9 @@ namespace RelayWorks.Infrastructure.Persistence.Migrations;
 [Migration("202608060001_InitialControlPlane")]
 public sealed class InitialControlPlane : Migration
 {
+    private static readonly string[] TenantCreatedColumns = ["TenantId", "CreatedAtUtc"];
+    private static readonly string[] TenantIdempotencyKeyColumns = ["TenantId", "IdempotencyKey"];
+
     protected override void Up(MigrationBuilder migrationBuilder)
     {
         migrationBuilder.CreateTable(
@@ -43,11 +46,11 @@ public sealed class InitialControlPlane : Migration
         migrationBuilder.CreateIndex(
             name: "IX_IntegrationRuns_TenantId_CreatedAtUtc",
             table: "IntegrationRuns",
-            columns: new[] { "TenantId", "CreatedAtUtc" });
+            columns: TenantCreatedColumns);
         migrationBuilder.CreateIndex(
             name: "IX_IntegrationRuns_TenantId_IdempotencyKey",
             table: "IntegrationRuns",
-            columns: new[] { "TenantId", "IdempotencyKey" },
+            columns: TenantIdempotencyKeyColumns,
             unique: true);
         migrationBuilder.CreateIndex(
             name: "IX_OutboxMessages_DispatchedAtUtc",

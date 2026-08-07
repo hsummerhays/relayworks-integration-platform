@@ -35,7 +35,7 @@ public sealed class WorkerOutboxPublisher(IServiceScopeFactory scopeFactory, Ser
                     MessageTelemetry.Inject(busMessage.ApplicationProperties);
                     await sender.SendMessageAsync(busMessage, stoppingToken);
                     message.DispatchedAtUtc = DateTimeOffset.UtcNow;
-                    WorkerTelemetry.OutboxPublished.Add(1, new("message.type", message.Type));
+                    WorkerTelemetry.OutboxPublished.Add(1, new KeyValuePair<string, object?>("message.type", message.Type));
                 }
                 if (messages.Count > 0) await db.SaveChangesAsync(stoppingToken);
                 else await Task.Delay(TimeSpan.FromSeconds(2), stoppingToken);

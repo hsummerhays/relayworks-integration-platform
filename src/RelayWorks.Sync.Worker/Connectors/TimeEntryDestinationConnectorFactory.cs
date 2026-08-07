@@ -3,7 +3,7 @@ using RelayWorks.Sync.Worker.Secrets;
 
 namespace RelayWorks.Sync.Worker;
 
-public sealed class TimeEntryDestinationConnectorFactory(
+public sealed partial class TimeEntryDestinationConnectorFactory(
     CachedSecretResolver secretResolver,
     ILogger<TimeEntryDestinationConnectorFactory> logger) : ITimeEntryDestinationConnectorFactory
 {
@@ -12,8 +12,7 @@ public sealed class TimeEntryDestinationConnectorFactory(
         CancellationToken cancellationToken)
     {
         var credential = await secretResolver.ResolveAsync(profile.Secret, cancellationToken);
-        logger.LogInformation("Created {Provider} connector using secret version {SecretVersion}",
-            profile.Provider, profile.Secret.SecretVersion ?? "latest");
+        LogConnectorCreated(logger, profile.Provider, profile.Secret.SecretVersion ?? "latest");
 
         // The reference adapter deliberately consumes but never stores or logs the credential.
         // A production provider factory would pass it to its authenticated SDK client here.
@@ -24,4 +23,7 @@ public sealed class TimeEntryDestinationConnectorFactory(
             _ => throw new NotSupportedException($"Connector provider '{profile.Provider}' is not registered.")
         };
     }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Created {Provider} connector using secret version {SecretVersion}")]
+    private static partial void LogConnectorCreated(ILogger logger, string provider, string secretVersion);
 }

@@ -7,6 +7,10 @@ namespace RelayWorks.Sync.Worker.Persistence.Migrations;
 [Migration("202608060001_InitialWorkerLedger")]
 public sealed class InitialWorkerLedger : Migration
 {
+    private static readonly string[] RunIdStateColumns = ["RunId", "State"];
+    private static readonly string[] IdempotencyColumns =
+        ["TenantId", "ConnectionId", "Operation", "SourceRecordId", "SourceVersion"];
+
     protected override void Up(MigrationBuilder migrationBuilder)
     {
         migrationBuilder.CreateTable("InboxMessages", table => new
@@ -35,9 +39,9 @@ public sealed class InitialWorkerLedger : Migration
             RowVersion = table.Column<byte[]>("rowversion", rowVersion: true, nullable: false)
         }, constraints: table => table.PrimaryKey("PK_RecordDeliveries", x => x.Id));
         migrationBuilder.CreateIndex("IX_OutboxMessages_DispatchedAtUtc", "OutboxMessages", "DispatchedAtUtc");
-        migrationBuilder.CreateIndex("IX_RecordDeliveries_RunId_State", "RecordDeliveries", new[] { "RunId", "State" });
+        migrationBuilder.CreateIndex("IX_RecordDeliveries_RunId_State", "RecordDeliveries", RunIdStateColumns);
         migrationBuilder.CreateIndex("IX_RecordDeliveries_Idempotency", "RecordDeliveries",
-            new[] { "TenantId", "ConnectionId", "Operation", "SourceRecordId", "SourceVersion" }, unique: true);
+            IdempotencyColumns, unique: true);
     }
 
     protected override void Down(MigrationBuilder migrationBuilder)

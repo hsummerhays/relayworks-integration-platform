@@ -1,5 +1,31 @@
 # Changelog
 
+## Post-Iteration 14 maintenance — 2026-08-07
+
+- Replaced process-global environment-variable mutations in Control Plane integration tests with environment-specific `appsettings.Testing.json`.
+- Preserved parallel test execution while ensuring authentication, Service Bus, and archival branches are disabled before application service registration.
+- Added the Azure Service Bus Emulator end-to-end flow to the post-reference-platform test roadmap.
+- Corrected integration-run construction while preserving the connector-profile snapshot on the queued command.
+
+## Iteration 14 — 2026-08-07
+
+- Replaced EF InMemory API coverage with SQL Server Testcontainers and real EF migrations.
+- Added SQL translation and HTTP tenant-isolation coverage against the production database engine.
+- Split run and record archive eligibility for clear short-circuit behavior.
+- Centralized integration-record status constants across archive, persistence, API, and tests.
+- Added a serializable final eligibility guard immediately before archive deletion.
+- Added CI time bounds, a protected deployment-plan workflow, immutable plan artifact, and readiness smoke-test script.
+- Raised Microsoft.OpenApi to the advisory's patched 2.7.5 floor and Microsoft.Identity.Web to 4.14.2; removed unnecessary framework-package pins that triggered NU1510. NuGet Audit remains enforced.
+
+## Iteration 13 — 2026-08-07
+
+- Added an in-process Control Plane integration-test host using an isolated EF Core database.
+- Added an HTTP-level test proving one tenant cannot list another tenant's integration runs.
+- Added archive-policy tests proving active, recent, rejected, and unknown-outcome work cannot be archived.
+- Added a circuit-breaker failure-injection test proving calls stop after the configured threshold.
+- Retained and organized existing tests for command redelivery, unknown-outcome non-retry, read-after-write recovery, and Key Vault request coalescing.
+- Added a failure matrix that maps each safety invariant to its automated or deployment-level verification.
+
 ## Iteration 12 — 2026-08-07
 
 - Added a Control Plane archival worker with dry-run mode and safe minimum retention validation.

@@ -19,7 +19,7 @@ public sealed class DestinationResilienceExecutorTests
         var attempts = 0;
 
         var result = await executor.WriteAsync(Guid.NewGuid(), "Test", 2, connector, Entry(), "key",
-            () => attempts++, default);
+            () => attempts++, TestContext.Current.CancellationToken);
 
         Assert.Equal(DestinationWriteStatus.Succeeded, result.Status);
         Assert.Equal(2, connector.Writes);
@@ -33,15 +33,35 @@ public sealed class DestinationResilienceExecutorTests
     {
         var delay = new RecordingDelay();
         var executor = CreateExecutor(delay);
-        var connector = new SequenceConnector(new(DestinationWriteStatus.UnknownOutcome,
+        var connector = new SequenceConnector(new DestinationWriteResult(DestinationWriteStatus.UnknownOutcome,
             ErrorCode: "TIMEOUT_AFTER_SEND"));
 
         var result = await executor.WriteAsync(Guid.NewGuid(), "Test", 5, connector, Entry(), "key",
-            () => throw new InvalidOperationException("No retry expected."), default);
+            () => throw new InvalidOperationException("No retry expected."), TestContext.Current.CancellationToken);
 
         Assert.Equal(DestinationWriteStatus.UnknownOutcome, result.Status);
         Assert.Equal(1, connector.Writes);
         Assert.Empty(delay.Delays);
+    }
+
+    [Fact]
+    public async Task Open_circuit_stops_calls_after_confirmed_failure_threshold()
+    {
+        var delay = new RecordingDelay();
+        var options = Options.Create(new ConnectorResilienceOptions
+        {
+            MaxConcurrentRequestsPerConnection = 1, RequestsPerSecondPerConnection = 1000,
+            BurstCapacityPerConnection = 1000, BaseRetryDelayMilliseconds = 1,
+            CircuitFailureThreshold = 1, CircuitBreakSeconds = 30
+        });
+        var executor = new DestinationResilienceExecutor(
+            new ConnectionExecutionGate(options, TimeProvider.System, delay), options, TimeProvider.System, delay);
+        var connector = new SequenceConnector(new DestinationWriteResult(DestinationWriteStatus.ConfirmedNoCommit));
+
+        var result = await executor.WriteAsync(Guid.NewGuid(), "Test", 5, connector, Entry(), "key", () => { }, TestContext.Current.CancellationToken);
+
+        Assert.Equal("CIRCUIT_OPEN", result.ErrorCode);
+        Assert.Equal(1, connector.Writes);
     }
 
     private static DestinationResilienceExecutor CreateExecutor(IResilienceDelay delay)

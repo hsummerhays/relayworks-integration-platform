@@ -6,6 +6,8 @@ namespace RelayWorks.Infrastructure.Persistence.Migrations;
 [Migration("202608060005_ConnectionTests")]
 public sealed class ConnectionTests : Migration
 {
+    private static readonly string[] TenantConnectionRequestedColumns = ["TenantId", "ConnectionId", "RequestedAtUtc"];
+
     protected override void Up(MigrationBuilder migrationBuilder)
     {
         migrationBuilder.CreateTable("ConnectionTests", table => new
@@ -17,7 +19,7 @@ public sealed class ConnectionTests : Migration
             RequestedAtUtc = table.Column<DateTimeOffset>("datetimeoffset", nullable: false), CompletedAtUtc = table.Column<DateTimeOffset>("datetimeoffset", nullable: true),
             DurationMilliseconds = table.Column<long>("bigint", nullable: true)
         }, constraints: table => table.PrimaryKey("PK_ConnectionTests", x => x.Id));
-        migrationBuilder.CreateIndex("IX_ConnectionTests_Tenant_Connection_Requested", "ConnectionTests", new[] { "TenantId", "ConnectionId", "RequestedAtUtc" });
+        migrationBuilder.CreateIndex("IX_ConnectionTests_Tenant_Connection_Requested", "ConnectionTests", TenantConnectionRequestedColumns);
     }
     protected override void Down(MigrationBuilder migrationBuilder) => migrationBuilder.DropTable("ConnectionTests");
 }

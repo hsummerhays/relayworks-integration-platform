@@ -23,22 +23,22 @@ public sealed class SqlIntegrationRunRepository(
         dbContext.IntegrationRuns.FirstOrDefaultAsync(run => run.Id == runId, cancellationToken);
 
     public async Task<IReadOnlyList<IntegrationRun>> ListAsync(
-        IntegrationRunQuery request,
+        IntegrationRunQuery query,
         CancellationToken cancellationToken)
     {
-        var query = dbContext.IntegrationRuns.AsNoTracking().Where(run => run.TenantId == request.TenantId);
-        if (request.Status.HasValue) query = query.Where(run => run.Status == request.Status.Value);
-        if (request.ConnectionId.HasValue) query = query.Where(run => run.ConnectionId == request.ConnectionId.Value);
-        if (request.FromUtc.HasValue) query = query.Where(run => run.CreatedAtUtc >= request.FromUtc.Value);
-        if (request.ToUtc.HasValue) query = query.Where(run => run.CreatedAtUtc < request.ToUtc.Value);
-        if (request.CursorTimestamp.HasValue && request.CursorId.HasValue)
-            query = query.Where(run => run.CreatedAtUtc < request.CursorTimestamp.Value ||
-                (run.CreatedAtUtc == request.CursorTimestamp.Value && run.Id.CompareTo(request.CursorId.Value) < 0));
+        var runsQuery = dbContext.IntegrationRuns.AsNoTracking().Where(run => run.TenantId == query.TenantId);
+        if (query.Status.HasValue) runsQuery = runsQuery.Where(run => run.Status == query.Status.Value);
+        if (query.ConnectionId.HasValue) runsQuery = runsQuery.Where(run => run.ConnectionId == query.ConnectionId.Value);
+        if (query.FromUtc.HasValue) runsQuery = runsQuery.Where(run => run.CreatedAtUtc >= query.FromUtc.Value);
+        if (query.ToUtc.HasValue) runsQuery = runsQuery.Where(run => run.CreatedAtUtc < query.ToUtc.Value);
+        if (query.CursorTimestamp.HasValue && query.CursorId.HasValue)
+            runsQuery = runsQuery.Where(run => run.CreatedAtUtc < query.CursorTimestamp.Value ||
+                (run.CreatedAtUtc == query.CursorTimestamp.Value && run.Id.CompareTo(query.CursorId.Value) < 0));
 
-        return await query
+        return await runsQuery
             .OrderByDescending(run => run.CreatedAtUtc)
             .ThenByDescending(run => run.Id)
-            .Take(request.PageSize)
+            .Take(query.PageSize)
             .ToListAsync(cancellationToken);
     }
 

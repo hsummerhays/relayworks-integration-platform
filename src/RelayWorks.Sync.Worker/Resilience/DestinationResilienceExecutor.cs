@@ -71,7 +71,7 @@ public sealed class DestinationResilienceExecutor(ConnectionExecutionGate gate,
             state.ConsecutiveFailures++;
             if (state.ConsecutiveFailures < Math.Max(1, _options.CircuitFailureThreshold)) return;
             state.OpenUntilUtc = timeProvider.GetUtcNow().AddSeconds(_options.CircuitBreakSeconds);
-            WorkerTelemetry.CircuitOpened.Add(1, new("provider", provider));
+            WorkerTelemetry.CircuitOpened.Add(1, new KeyValuePair<string, object?>("provider", provider));
         }
     }
 

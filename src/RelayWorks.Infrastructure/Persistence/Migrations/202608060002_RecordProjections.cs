@@ -7,6 +7,9 @@ namespace RelayWorks.Infrastructure.Persistence.Migrations;
 [Migration("202608060002_RecordProjections")]
 public sealed class RecordProjections : Migration
 {
+    private static readonly string[] RunSourceVersionColumns = ["RunId", "SourceRecordId", "SourceVersion"];
+    private static readonly string[] TenantStatusUpdatedColumns = ["TenantId", "Status", "UpdatedAtUtc"];
+
     protected override void Up(MigrationBuilder migrationBuilder)
     {
         migrationBuilder.CreateTable("IntegrationRecordProjections", table => new
@@ -26,9 +29,9 @@ public sealed class RecordProjections : Migration
             UpdatedAtUtc = table.Column<DateTimeOffset>("datetimeoffset", nullable: false)
         }, constraints: table => table.PrimaryKey("PK_IntegrationRecordProjections", x => x.Id));
         migrationBuilder.CreateIndex("IX_RecordProjection_Run_Source_Version", "IntegrationRecordProjections",
-            new[] { "RunId", "SourceRecordId", "SourceVersion" }, unique: true);
+            RunSourceVersionColumns, unique: true);
         migrationBuilder.CreateIndex("IX_RecordProjection_Tenant_Status_Updated", "IntegrationRecordProjections",
-            new[] { "TenantId", "Status", "UpdatedAtUtc" });
+            TenantStatusUpdatedColumns);
     }
 
     protected override void Down(MigrationBuilder migrationBuilder) =>

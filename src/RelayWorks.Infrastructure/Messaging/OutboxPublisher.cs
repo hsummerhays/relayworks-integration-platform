@@ -11,7 +11,7 @@ using System.Diagnostics;
 
 namespace RelayWorks.Infrastructure.Messaging;
 
-public sealed class OutboxPublisher(
+public sealed partial class OutboxPublisher(
     IServiceScopeFactory scopeFactory,
     ServiceBusClient serviceBusClient,
     IOptions<ServiceBusOptions> options,
@@ -59,18 +59,21 @@ public sealed class OutboxPublisher(
                 MessageTelemetry.Inject(busMessage.ApplicationProperties);
                 await sender.SendMessageAsync(busMessage, cancellationToken);
                 message.MarkDispatched(timeProvider.GetUtcNow());
-                ControlPlaneTelemetry.OutboxPublished.Add(1, new("message.type", message.Type));
+                ControlPlaneTelemetry.OutboxPublished.Add(1, new KeyValuePair<string, object?>("message.type", message.Type));
                 ControlPlaneTelemetry.OutboxLag.Record((timeProvider.GetUtcNow() - message.OccurredAtUtc).TotalSeconds,
-                    new("message.type", message.Type));
+                    new KeyValuePair<string, object?>("message.type", message.Type));
             }
             catch (Exception exception)
             {
-                logger.LogError(exception, "Failed to dispatch outbox message {MessageId}", message.Id);
+                LogDispatchFailed(logger, exception, message.Id);
                 activity?.SetStatus(ActivityStatusCode.Error, exception.GetType().Name);
-                ControlPlaneTelemetry.OutboxFailures.Add(1, new("message.type", message.Type));
+                ControlPlaneTelemetry.OutboxFailures.Add(1, new KeyValuePair<string, object?>("message.type", message.Type));
             }
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
     }
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to dispatch outbox message {MessageId}")]
+    private static partial void LogDispatchFailed(ILogger logger, Exception exception, Guid messageId);
 }

@@ -7,6 +7,8 @@ namespace RelayWorks.Infrastructure.Persistence.Migrations;
 [Migration("202608060003_ConnectionProfiles")]
 public sealed class ConnectionProfiles : Migration
 {
+    private static readonly string[] TenantNameColumns = ["TenantId", "Name"];
+
     protected override void Up(MigrationBuilder migrationBuilder)
     {
         migrationBuilder.CreateTable("ConnectionProfiles", table => new
@@ -24,7 +26,7 @@ public sealed class ConnectionProfiles : Migration
             UpdatedAtUtc = table.Column<DateTimeOffset>("datetimeoffset", nullable: false)
         }, constraints: table => table.PrimaryKey("PK_ConnectionProfiles", x => x.Id));
         migrationBuilder.CreateIndex("IX_ConnectionProfiles_TenantId_Name", "ConnectionProfiles",
-            new[] { "TenantId", "Name" }, unique: true);
+            TenantNameColumns, unique: true);
     }
 
     protected override void Down(MigrationBuilder migrationBuilder) => migrationBuilder.DropTable("ConnectionProfiles");

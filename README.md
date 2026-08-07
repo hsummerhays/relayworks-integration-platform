@@ -1,6 +1,6 @@
 # RelayWorks Integration Platform
 
-RelayWorks is a .NET and Vue reference platform for reliable construction-system integrations. Iteration 12 adds verified archival and conservative retention controls without weakening delivery idempotency.
+RelayWorks is a .NET and Vue reference platform for reliable construction-system integrations. Iteration 14 hardens relational testing, archive concurrency safety, CI, and approval-gated deployment planning.
 
 ## Implemented vertical slice
 
@@ -66,6 +66,7 @@ Both EF Core migration sets are intended to run from an approved deployment job.
 | Per-connection concurrency limits, token bucket, safe retries, and circuit breaker | Implemented |
 | Cursor-paged runs and records with status, connection, and date filtering | Implemented |
 | Verified Blob archival, dry-run retention, and lifecycle tiering | Implemented; destructive mode disabled by default |
+| Tenant-isolation, redelivery, retry-safety, circuit, and archive-policy tests | Implemented |
 | Terraform Azure environment | Implemented, not applied |
 | Real vendor connectors | Planned |
 | Distributed limiter coordination and durable long-delay retries | Planned |

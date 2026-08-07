@@ -1,6 +1,7 @@
 name: RelayWorks CI
 
 on:
+  workflow_call:
   pull_request:
   push:
     branches: [main]
@@ -11,6 +12,7 @@ permissions:
 jobs:
   dotnet:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -19,6 +21,8 @@ jobs:
       - run: dotnet restore RelayWorks.slnx
       - run: dotnet build RelayWorks.slnx --configuration Release --no-restore
       - run: dotnet test RelayWorks.slnx --configuration Release --no-build
+        env:
+          TESTCONTAINERS_RYUK_DISABLED: "false"
 
   console:
     runs-on: ubuntu-latest

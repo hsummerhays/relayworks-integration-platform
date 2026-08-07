@@ -8,7 +8,7 @@ using System.Diagnostics;
 
 namespace RelayWorks.Sync.Worker;
 
-public sealed class IntegrationCommandWorker(
+public sealed partial class IntegrationCommandWorker(
     IServiceScopeFactory scopeFactory,
     ServiceBusClient serviceBusClient,
     IOptions<ServiceBusOptions> options,
@@ -24,7 +24,7 @@ public sealed class IntegrationCommandWorker(
         _processor.ProcessMessageAsync += ProcessMessageAsync;
         _processor.ProcessErrorAsync += args =>
         {
-            logger.LogError(args.Exception, "Service Bus command worker failed at {ErrorSource}", args.ErrorSource);
+            LogProcessorError(logger, args.Exception, args.ErrorSource);
             return Task.CompletedTask;
         };
         await _processor.StartProcessingAsync(cancellationToken);
@@ -45,14 +45,14 @@ public sealed class IntegrationCommandWorker(
         activity?.SetTag("messaging.delivery_count", args.Message.DeliveryCount);
         if (args.Message.Subject == nameof(ConnectionTestRequestedV1))
         {
-            var command = args.Message.Body.ToObjectFromJson<ConnectionTestRequestedV1>()
+            var testCommand = args.Message.Body.ToObjectFromJson<ConnectionTestRequestedV1>()
                 ?? throw new InvalidOperationException("Connection test payload was empty.");
             await using var testScope = scopeFactory.CreateAsyncScope();
             await testScope.ServiceProvider.GetRequiredService<ConnectionTestProcessor>()
-                .ProcessAsync(command, args.CancellationToken);
+                .ProcessAsync(testCommand, args.CancellationToken);
             await args.CompleteMessageAsync(args.Message, args.CancellationToken);
-            WorkerTelemetry.CommandsProcessed.Add(1, new("command.type", nameof(ConnectionTestRequestedV1)));
-            logger.LogInformation("Processed connection test {TestId}", command.TestId);
+            WorkerTelemetry.CommandsProcessed.Add(1, new KeyValuePair<string, object?>("command.type", nameof(ConnectionTestRequestedV1)));
+            LogConnectionTestProcessed(logger, testCommand.TestId);
             return;
         }
 
@@ -74,13 +74,21 @@ public sealed class IntegrationCommandWorker(
         var processor = scope.ServiceProvider.GetRequiredService<TimeEntryProcessor>();
         var result = await processor.ProcessAsync(command, timeProvider.GetUtcNow(), args.CancellationToken);
         await args.CompleteMessageAsync(args.Message, args.CancellationToken);
-        WorkerTelemetry.CommandsProcessed.Add(1, new("command.type", nameof(IntegrationRunRequestedV1)));
-        logger.LogInformation("Persisted run {RunId}: {Accepted} accepted, {Rejected} requiring attention",
-            result.RunId, result.AcceptedRecords, result.RejectedRecords);
+        WorkerTelemetry.CommandsProcessed.Add(1, new KeyValuePair<string, object?>("command.type", nameof(IntegrationRunRequestedV1)));
+        LogRunPersisted(logger, result.RunId, result.AcceptedRecords, result.RejectedRecords);
     }
 
     public async ValueTask DisposeAsync()
     {
         if (_processor is not null) await _processor.DisposeAsync();
     }
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Service Bus command worker failed at {ErrorSource}")]
+    private static partial void LogProcessorError(ILogger logger, Exception exception, ServiceBusErrorSource errorSource);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Processed connection test {TestId}")]
+    private static partial void LogConnectionTestProcessed(ILogger logger, Guid testId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Persisted run {RunId}: {Accepted} accepted, {Rejected} requiring attention")]
+    private static partial void LogRunPersisted(ILogger logger, Guid runId, int accepted, int rejected);
 }

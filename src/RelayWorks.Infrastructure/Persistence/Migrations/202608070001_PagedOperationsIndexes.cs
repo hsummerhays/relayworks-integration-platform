@@ -7,17 +7,21 @@ namespace RelayWorks.Infrastructure.Persistence.Migrations;
 [Migration("202608070001_PagedOperationsIndexes")]
 public sealed class PagedOperationsIndexes : Migration
 {
+    private static readonly string[] TenantStatusCreatedIdColumns = ["TenantId", "Status", "CreatedAtUtc", "Id"];
+    private static readonly string[] TenantConnectionCreatedIdColumns = ["TenantId", "ConnectionId", "CreatedAtUtc", "Id"];
+    private static readonly string[] TenantRunUpdatedIdColumns = ["TenantId", "RunId", "UpdatedAtUtc", "Id"];
+
     protected override void Up(MigrationBuilder migrationBuilder)
     {
         migrationBuilder.CreateIndex(
             "IX_IntegrationRuns_TenantId_Status_CreatedAtUtc_Id", "IntegrationRuns",
-            new[] { "TenantId", "Status", "CreatedAtUtc", "Id" });
+            TenantStatusCreatedIdColumns);
         migrationBuilder.CreateIndex(
             "IX_IntegrationRuns_TenantId_ConnectionId_CreatedAtUtc_Id", "IntegrationRuns",
-            new[] { "TenantId", "ConnectionId", "CreatedAtUtc", "Id" });
+            TenantConnectionCreatedIdColumns);
         migrationBuilder.CreateIndex(
             "IX_IntegrationRecordProjections_TenantId_RunId_UpdatedAtUtc_Id",
-            "IntegrationRecordProjections", new[] { "TenantId", "RunId", "UpdatedAtUtc", "Id" });
+            "IntegrationRecordProjections", TenantRunUpdatedIdColumns);
     }
 
     protected override void Down(MigrationBuilder migrationBuilder)

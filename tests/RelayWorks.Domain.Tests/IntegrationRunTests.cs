@@ -1,3 +1,4 @@
+using System.Globalization;
 using RelayWorks.Domain.IntegrationRuns;
 
 namespace RelayWorks.Domain.Tests;
@@ -12,7 +13,7 @@ public sealed class IntegrationRunTests
     {
         var run = CreateRun(10);
         run.Start();
-        run.Complete(8, 2, DateTimeOffset.Parse("2026-08-06T12:01:00Z"));
+        run.Complete(8, 2, DateTimeOffset.Parse("2026-08-06T12:01:00Z", CultureInfo.InvariantCulture));
 
         Assert.Equal(IntegrationRunStatus.CompletedWithErrors, run.Status);
         Assert.Equal(8, run.AcceptedRecords);
@@ -26,7 +27,7 @@ public sealed class IntegrationRunTests
         run.Start();
 
         Assert.Throws<ArgumentException>(() =>
-            run.Complete(7, 2, DateTimeOffset.Parse("2026-08-06T12:01:00Z")));
+            run.Complete(7, 2, DateTimeOffset.Parse("2026-08-06T12:01:00Z", CultureInfo.InvariantCulture)));
     }
 
     [Fact]
@@ -38,7 +39,7 @@ public sealed class IntegrationRunTests
             IntegrationOperation.TimeEntryExport,
             "time-2026-w32",
             10,
-            DateTimeOffset.Parse("2026-08-06T12:00:00Z")));
+            DateTimeOffset.Parse("2026-08-06T12:00:00Z", CultureInfo.InvariantCulture)));
     }
 
     private static IntegrationRun CreateRun(int totalRecords) => IntegrationRun.Create(
@@ -47,5 +48,5 @@ public sealed class IntegrationRunTests
         IntegrationOperation.TimeEntryExport,
         "time-2026-w32",
         totalRecords,
-        DateTimeOffset.Parse("2026-08-06T12:00:00Z"));
+        DateTimeOffset.Parse("2026-08-06T12:00:00Z", CultureInfo.InvariantCulture));
 }

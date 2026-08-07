@@ -5,7 +5,7 @@ using RelayWorks.Contracts.IntegrationRuns;
 
 namespace RelayWorks.Sync.Worker.Secrets;
 
-public sealed class CachedSecretResolver(
+public sealed partial class CachedSecretResolver(
     IMemoryCache cache,
     ISecretValueProvider provider,
     ISecretLocatorRouter router,
@@ -28,7 +28,7 @@ public sealed class CachedSecretResolver(
         if (cache.TryGetValue<string>(key, out var cached))
         {
             CacheHits.Add(1);
-            logger.LogDebug("Connector secret cache hit for {VaultHost}/{SecretName}", locator.VaultUri.Host, locator.SecretName);
+            LogCacheHit(logger, locator.VaultUri.Host, locator.SecretName);
             return cached!;
         }
 
@@ -44,8 +44,7 @@ public sealed class CachedSecretResolver(
         {
             var value = await lazy.Value.WaitAsync(cancellationToken);
             cache.Set(key, value, timeProvider.GetUtcNow().Add(CacheTtl));
-            logger.LogInformation("Refreshed connector secret cache for {VaultHost}/{SecretName}",
-                locator.VaultUri.Host, locator.SecretName);
+            LogCacheRefreshed(logger, locator.VaultUri.Host, locator.SecretName);
             _failureCooldowns.TryRemove(key, out _);
             return value;
         }
@@ -53,10 +52,18 @@ public sealed class CachedSecretResolver(
         {
             RefreshFailures.Add(1);
             _failureCooldowns[key] = timeProvider.GetUtcNow().Add(FailureCooldown);
-            logger.LogWarning(exception, "Connector secret refresh failed for {VaultHost}/{SecretName}",
-                locator.VaultUri.Host, locator.SecretName);
+            LogCacheRefreshFailed(logger, exception, locator.VaultUri.Host, locator.SecretName);
             throw;
         }
         finally { _inflight.TryRemove(key, out _); }
     }
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Connector secret cache hit for {VaultHost}/{SecretName}")]
+    private static partial void LogCacheHit(ILogger logger, string vaultHost, string secretName);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Refreshed connector secret cache for {VaultHost}/{SecretName}")]
+    private static partial void LogCacheRefreshed(ILogger logger, string vaultHost, string secretName);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Connector secret refresh failed for {VaultHost}/{SecretName}")]
+    private static partial void LogCacheRefreshFailed(ILogger logger, Exception exception, string vaultHost, string secretName);
 }

@@ -7,7 +7,7 @@ using RelayWorks.Sync.Worker.Telemetry;
 
 namespace RelayWorks.Sync.Worker;
 
-public sealed class ConnectionTestProcessor(ITimeEntryDestinationConnectorFactory factory,
+public sealed partial class ConnectionTestProcessor(ITimeEntryDestinationConnectorFactory factory,
     WorkerLedgerDbContext db, TimeProvider timeProvider, ILogger<ConnectionTestProcessor> logger)
 {
     public async Task ProcessAsync(ConnectionTestRequestedV1 command, CancellationToken cancellationToken)
@@ -34,13 +34,13 @@ public sealed class ConnectionTestProcessor(ITimeEntryDestinationConnectorFactor
         {
             status = "Failed"; category = exception.Status is 401 or 403 ? "CredentialOrPermission" : "ProviderService";
             safeMessage = "Credential resolution or provider access failed. Review the connection and Worker diagnostics.";
-            logger.LogWarning(exception, "Connection test {TestId} failed", command.TestId);
+            LogConnectionTestFailed(logger, exception, command.TestId);
         }
         catch (Exception exception)
         {
             status = "Failed"; category = "ConfigurationOrNetwork";
             safeMessage = "The connection test failed. Review configuration and Worker diagnostics.";
-            logger.LogWarning(exception, "Connection test {TestId} failed", command.TestId);
+            LogConnectionTestFailed(logger, exception, command.TestId);
         }
         stopwatch.Stop(); var now = timeProvider.GetUtcNow(); var eventId = Guid.NewGuid();
         activity?.SetTag("connector.test.status", status);
@@ -54,4 +54,7 @@ public sealed class ConnectionTestProcessor(ITimeEntryDestinationConnectorFactor
             Payload = JsonSerializer.Serialize(result), OccurredAtUtc = now });
         await db.SaveChangesAsync(cancellationToken);
     }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Connection test {TestId} failed")]
+    private static partial void LogConnectionTestFailed(ILogger logger, Exception exception, Guid testId);
 }

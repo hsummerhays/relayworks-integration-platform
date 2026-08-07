@@ -44,8 +44,8 @@ public sealed class SimulatedAccountingConnector : ITimeEntryDestinationConnecto
     public Task<DestinationLookupResult> FindByIdempotencyKeyAsync(string idempotencyKey,
         CancellationToken cancellationToken) => Task.FromResult(
         Committed.TryGetValue(idempotencyKey, out var reference)
-            ? new(true, reference)
-            : new(false));
+            ? new DestinationLookupResult(true, reference)
+            : new DestinationLookupResult(false));
 
     public async Task<ConnectorHealthResult> TestConnectionAsync(CancellationToken cancellationToken)
     {

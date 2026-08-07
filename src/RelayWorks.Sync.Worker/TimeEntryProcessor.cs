@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -33,7 +34,7 @@ public sealed class TimeEntryProcessor(
         foreach (var result in reported)
         {
             if (result.Status == nameof(RecordDeliveryState.Succeeded))
-                WorkerTelemetry.RecordsDelivered.Add(1, new("provider", profile.Provider));
+                WorkerTelemetry.RecordsDelivered.Add(1, new KeyValuePair<string, object?>("provider", profile.Provider));
             else WorkerTelemetry.RecordsAttention.Add(1, new("provider", profile.Provider), new("status", result.Status));
         }
 
@@ -124,7 +125,7 @@ public sealed class TimeEntryProcessor(
             DestinationWriteStatus.Rejected => RecordDeliveryState.Rejected,
             DestinationWriteStatus.ConfirmedNoCommit => RecordDeliveryState.RetryableFailure,
             DestinationWriteStatus.UnknownOutcome => RecordDeliveryState.UnknownOutcome,
-            _ => throw new ArgumentOutOfRangeException()
+            _ => throw new ArgumentOutOfRangeException(null, $"Unsupported destination write status: {write.Status}")
         };
         delivery.Finish(state, write.DestinationReference, write.ErrorCode, write.ErrorMessage, now);
         connectorTimer.Stop();
@@ -160,7 +161,7 @@ public sealed class TimeEntryProcessor(
     private static string Fingerprint(CanonicalTimeEntryV1 entry)
     {
         var canonical = string.Join('|', entry.TenantId, entry.SourceRecordId, entry.SourceVersion,
-            entry.EmployeeReference, entry.ProjectReference, entry.WorkDate.ToString("O"),
+            entry.EmployeeReference, entry.ProjectReference, entry.WorkDate.ToString("O", CultureInfo.InvariantCulture),
             entry.RegularHours, entry.OvertimeHours, entry.LaborCode);
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)));
     }

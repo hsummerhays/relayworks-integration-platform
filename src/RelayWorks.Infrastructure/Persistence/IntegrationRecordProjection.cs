@@ -1,3 +1,5 @@
+using RelayWorks.Contracts.IntegrationRuns;
+
 namespace RelayWorks.Infrastructure.Persistence;
 
 public sealed class IntegrationRecordProjection
@@ -31,17 +33,17 @@ public sealed class IntegrationRecordProjection
     public void Update(string status, string? errorCode, string? errorMessage,
         string? destinationReference, DateTimeOffset updatedAt)
     {
-        if (Status == "ManuallyResolved") return;
+        if (Status == IntegrationRecordStatuses.ManuallyResolved) return;
         Status = status; ErrorCode = errorCode; ErrorMessage = errorMessage;
         DestinationReference = destinationReference; UpdatedAtUtc = updatedAt;
     }
 
     public void Resolve(string notes, DateTimeOffset now)
     {
-        if (Status is not ("UnknownOutcome" or "Rejected"))
+        if (Status is not (IntegrationRecordStatuses.UnknownOutcome or IntegrationRecordStatuses.Rejected))
             throw new InvalidOperationException("Only records requiring attention can be resolved.");
         if (string.IsNullOrWhiteSpace(notes)) throw new ArgumentException("Resolution notes are required.", nameof(notes));
-        Status = "ManuallyResolved";
+        Status = IntegrationRecordStatuses.ManuallyResolved;
         ResolutionNotes = notes.Trim();
         UpdatedAtUtc = now;
     }

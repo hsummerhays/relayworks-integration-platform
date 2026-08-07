@@ -12,6 +12,7 @@ using Microsoft.Identity.Web;
 using Microsoft.AspNetCore.Authorization;
 using System.Text.Json;
 using RelayWorks.Contracts.Connections;
+using RelayWorks.Contracts.IntegrationRuns;
 using RelayWorks.Contracts.Telemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -43,8 +44,9 @@ builder.Services.AddOptions<ArchiveOptions>().Bind(builder.Configuration.GetSect
         "Archive retention, batch, and interval values are outside safe bounds.").ValidateOnStart();
 if (archiveOptions.Enabled)
 {
-    builder.Services.AddSingleton(new BlobContainerClient(
-        new Uri(archiveOptions.BlobServiceUri), archiveOptions.ContainerName, new DefaultAzureCredential()));
+    builder.Services.AddSingleton(new BlobServiceClient(
+        new Uri(archiveOptions.BlobServiceUri), new DefaultAzureCredential())
+        .GetBlobContainerClient(archiveOptions.ContainerName));
     builder.Services.AddHostedService<ControlPlaneArchiveWorker>();
 }
 var applicationInsights = builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"];
@@ -68,9 +70,14 @@ if (authenticationEnabled)
 }
 builder.Services.AddAuthorization(options =>
 {
-    options.FallbackPolicy = authenticationEnabled
+    var basePolicy = authenticationEnabled
         ? new AuthorizationPolicyBuilder().RequireAuthenticatedUser().RequireClaim("relayworks_tenant_id").Build()
         : new AuthorizationPolicyBuilder().RequireAssertion(_ => true).Build();
+    // RequireAuthorization() with no policy name applies DefaultPolicy, not FallbackPolicy;
+    // both must honor the disabled-auth escape hatch or every explicitly-secured endpoint
+    // demands a real authenticated user even when authentication is turned off.
+    options.DefaultPolicy = basePolicy;
+    options.FallbackPolicy = basePolicy;
     options.AddPolicy("IntegrationOperator", policy =>
     {
         if (authenticationEnabled) { policy.RequireAuthenticatedUser(); policy.RequireClaim("relayworks_tenant_id"); }
@@ -245,8 +252,8 @@ runs.MapGet("/{runId:guid}/records", async (Guid runId, string? cursor, string? 
         .Where(x => x.RunId == runId && x.TenantId == tenantContext.RequireTenantId());
     query = view?.ToLowerInvariant() switch
     {
-        "attention" => query.Where(x => x.Status == "Rejected" || x.Status == "UnknownOutcome"),
-        "resolved" => query.Where(x => x.Status == "ManuallyResolved"),
+        "attention" => query.Where(x => x.Status == IntegrationRecordStatuses.Rejected || x.Status == IntegrationRecordStatuses.UnknownOutcome),
+        "resolved" => query.Where(x => x.Status == IntegrationRecordStatuses.ManuallyResolved),
         null or "" or "all" => query,
         _ => null!
     };
@@ -304,14 +311,19 @@ app.MapGet("/health/ready", async (RelayWorksDbContext db, TimeProvider timeProv
 }).AllowAnonymous();
 app.Run();
 
-public sealed record SubmitIntegrationRunRequest(
-    Guid ConnectionId,
-    IntegrationOperation Operation,
-    string IdempotencyKey,
-    int TotalRecords);
+namespace RelayWorks.ControlPlane.Api
+{
+    public sealed record SubmitIntegrationRunRequest(
+        Guid ConnectionId,
+        IntegrationOperation Operation,
+        string IdempotencyKey,
+        int TotalRecords);
 
-public sealed record ResolveReconciliationIssueRequest(string ResolutionNotes);
+    public sealed record ResolveReconciliationIssueRequest(string ResolutionNotes);
 
-public sealed record CreateConnectionProfileRequest(Guid Id, string Name, string Provider,
-    bool SupportsIdempotencyKey, bool SupportsReadAfterWrite, int MaxConfirmedNoCommitRetries,
-    string SecretReference);
+    public sealed record CreateConnectionProfileRequest(Guid Id, string Name, string Provider,
+        bool SupportsIdempotencyKey, bool SupportsReadAfterWrite, int MaxConfirmedNoCommitRetries,
+        string SecretReference);
+}
+
+public partial class Program;

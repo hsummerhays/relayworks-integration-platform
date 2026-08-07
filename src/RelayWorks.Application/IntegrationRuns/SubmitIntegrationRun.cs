@@ -38,8 +38,7 @@ public sealed class SubmitIntegrationRunHandler(
             command.Operation,
             command.IdempotencyKey,
             command.TotalRecords,
-            timeProvider.GetUtcNow(),
-            command.ConnectorProfile);
+            timeProvider.GetUtcNow());
         var message = new IntegrationRunRequestedV1(
             Guid.NewGuid(),
             run.Id,
@@ -47,7 +46,8 @@ public sealed class SubmitIntegrationRunHandler(
             run.ConnectionId,
             run.Operation.ToString(),
             run.TotalRecords,
-            timeProvider.GetUtcNow());
+            timeProvider.GetUtcNow(),
+            command.ConnectorProfile);
 
         try
         {
