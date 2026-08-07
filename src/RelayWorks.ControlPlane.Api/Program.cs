@@ -98,8 +98,24 @@ var runs = app.MapGroup("/api/integration-runs").WithTags("Integration Runs").Re
 runs.MapGet("/", async (
     TenantContext tenantContext,
     ListIntegrationRunsHandler handler,
+    string? cursor,
+    IntegrationRunStatus? status,
+    Guid? connectionId,
+    DateTimeOffset? fromUtc,
+    DateTimeOffset? toUtc,
+    int? pageSize,
     CancellationToken cancellationToken) =>
-    Results.Ok(await handler.HandleAsync(tenantContext.RequireTenantId(), cancellationToken)));
+{
+    if (!PageCursor.TryDecode(cursor, out var cursorTimestamp, out var cursorId))
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["cursor"] = ["The cursor is invalid."] });
+    if (fromUtc.HasValue && toUtc.HasValue && fromUtc >= toUtc)
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["dateRange"] = ["fromUtc must be before toUtc."] });
+    var size = Math.Clamp(pageSize ?? 25, 1, 100);
+    var query = new IntegrationRunQuery(tenantContext.RequireTenantId(), status, connectionId,
+        fromUtc, toUtc, size, string.IsNullOrWhiteSpace(cursor) ? null : cursorTimestamp,
+        string.IsNullOrWhiteSpace(cursor) ? null : cursorId);
+    return Results.Ok(await handler.HandleAsync(query, cancellationToken));
+});
 
 runs.MapPost("/", async (
     SubmitIntegrationRunRequest request,
@@ -203,15 +219,33 @@ connections.MapGet("/{connectionId:guid}/tests/latest", async (Guid connectionId
     return result is null ? Results.NotFound() : Results.Ok(result);
 });
 
-runs.MapGet("/{runId:guid}/records", async (Guid runId, RelayWorksDbContext db, TenantContext tenantContext, CancellationToken cancellationToken) =>
-    Results.Ok(await db.IntegrationRecordProjections.AsNoTracking()
-        .Where(x => x.RunId == runId && x.TenantId == tenantContext.RequireTenantId()).OrderBy(x => x.SourceRecordId).ToListAsync(cancellationToken)));
+runs.MapGet("/{runId:guid}/records", async (Guid runId, string? cursor, string? view, int? pageSize,
+    RelayWorksDbContext db, TenantContext tenantContext, CancellationToken cancellationToken) =>
+{
+    if (!PageCursor.TryDecode(cursor, out var cursorTimestamp, out var cursorId))
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["cursor"] = ["The cursor is invalid."] });
+    var size = Math.Clamp(pageSize ?? 50, 1, 100);
+    var query = db.IntegrationRecordProjections.AsNoTracking()
+        .Where(x => x.RunId == runId && x.TenantId == tenantContext.RequireTenantId());
+    query = view?.ToLowerInvariant() switch
+    {
+        "attention" => query.Where(x => x.Status == "Rejected" || x.Status == "UnknownOutcome"),
+        "resolved" => query.Where(x => x.Status == "ManuallyResolved"),
+        null or "" or "all" => query,
+        _ => null!
+    };
+    if (query is null)
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["view"] = ["Use all, attention, or resolved."] });
+    if (!string.IsNullOrWhiteSpace(cursor))
+        query = query.Where(x => x.UpdatedAtUtc < cursorTimestamp ||
+            (x.UpdatedAtUtc == cursorTimestamp && x.Id.CompareTo(cursorId) < 0));
+    var rows = await query.OrderByDescending(x => x.UpdatedAtUtc).ThenByDescending(x => x.Id)
+        .Take(size + 1).ToListAsync(cancellationToken);
+    var page = rows.Take(size).ToList();
+    var next = rows.Count > size && page.Count > 0 ? PageCursor.Encode(page[^1].UpdatedAtUtc, page[^1].Id) : null;
+    return Results.Ok(new PagedResult<IntegrationRecordProjection>(page, next, size));
+});
 
-runs.MapGet("/{runId:guid}/issues", async (Guid runId, RelayWorksDbContext db, TenantContext tenantContext, CancellationToken cancellationToken) =>
-    Results.Ok(await db.IntegrationRecordProjections.AsNoTracking()
-        .Where(x => x.RunId == runId && x.TenantId == tenantContext.RequireTenantId() && (x.Status == "Rejected" || x.Status == "UnknownOutcome"))
-        .OrderByDescending(x => x.Status == "UnknownOutcome").ThenBy(x => x.SourceRecordId)
-        .ToListAsync(cancellationToken)));
 
 app.MapPost("/api/reconciliation-issues/{id:guid}/resolve", async (Guid id,
     ResolveReconciliationIssueRequest request, RelayWorksDbContext db, TimeProvider timeProvider,

@@ -1,5 +1,15 @@
 # Changelog
 
+## Iteration 11 — 2026-08-07
+
+- Replaced the implicit 200-run cap with explicit cursor-paged response envelopes.
+- Added tenant-scoped run filtering by status, connection, and UTC creation range.
+- Added cursor pagination and server-side all/attention/resolved filtering for record projections.
+- Added bounded page sizes and invalid-cursor/date-range validation.
+- Added composite SQL indexes and an EF Core migration for the new query shapes.
+- Added Vue run filters, forward/back paging, responsive controls, and URL-persisted filter state.
+- Added cursor round-trip and page-boundary application tests.
+
 ## Iteration 10 — 2026-08-07
 
 - Converted destination writes and idempotency lookups to cancellation-aware asynchronous connector operations.

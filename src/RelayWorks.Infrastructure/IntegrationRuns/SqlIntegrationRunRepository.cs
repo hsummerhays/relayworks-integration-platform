@@ -3,6 +3,7 @@ using Microsoft.Data.SqlClient;
 using RelayWorks.Application.Abstractions;
 using RelayWorks.Domain.IntegrationRuns;
 using RelayWorks.Infrastructure.Persistence;
+using RelayWorks.Application.IntegrationRuns;
 
 namespace RelayWorks.Infrastructure.IntegrationRuns;
 
@@ -22,15 +23,22 @@ public sealed class SqlIntegrationRunRepository(
         dbContext.IntegrationRuns.FirstOrDefaultAsync(run => run.Id == runId, cancellationToken);
 
     public async Task<IReadOnlyList<IntegrationRun>> ListAsync(
-        Guid? tenantId,
+        IntegrationRunQuery request,
         CancellationToken cancellationToken)
     {
-        var query = dbContext.IntegrationRuns.AsNoTracking();
-        if (tenantId.HasValue) query = query.Where(run => run.TenantId == tenantId.Value);
+        var query = dbContext.IntegrationRuns.AsNoTracking().Where(run => run.TenantId == request.TenantId);
+        if (request.Status.HasValue) query = query.Where(run => run.Status == request.Status.Value);
+        if (request.ConnectionId.HasValue) query = query.Where(run => run.ConnectionId == request.ConnectionId.Value);
+        if (request.FromUtc.HasValue) query = query.Where(run => run.CreatedAtUtc >= request.FromUtc.Value);
+        if (request.ToUtc.HasValue) query = query.Where(run => run.CreatedAtUtc < request.ToUtc.Value);
+        if (request.CursorTimestamp.HasValue && request.CursorId.HasValue)
+            query = query.Where(run => run.CreatedAtUtc < request.CursorTimestamp.Value ||
+                (run.CreatedAtUtc == request.CursorTimestamp.Value && run.Id.CompareTo(request.CursorId.Value) < 0));
 
         return await query
             .OrderByDescending(run => run.CreatedAtUtc)
-            .Take(200)
+            .ThenByDescending(run => run.Id)
+            .Take(request.PageSize)
             .ToListAsync(cancellationToken);
     }
 

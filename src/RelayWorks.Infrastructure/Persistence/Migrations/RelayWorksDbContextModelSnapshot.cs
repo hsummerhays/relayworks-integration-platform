@@ -28,7 +28,9 @@ public sealed class RelayWorksDbContextModelSnapshot : ModelSnapshot
             entity.Property<int>("TotalRecords").HasColumnType("int");
             entity.HasKey("Id");
             entity.HasIndex("TenantId", "CreatedAtUtc");
+            entity.HasIndex("TenantId", "ConnectionId", "CreatedAtUtc", "Id");
             entity.HasIndex("TenantId", "IdempotencyKey").IsUnique();
+            entity.HasIndex("TenantId", "Status", "CreatedAtUtc", "Id");
             entity.ToTable("IntegrationRuns");
         });
 
@@ -63,6 +65,7 @@ public sealed class RelayWorksDbContextModelSnapshot : ModelSnapshot
             entity.HasKey("Id");
             entity.HasIndex("RunId", "SourceRecordId", "SourceVersion").IsUnique();
             entity.HasIndex("TenantId", "Status", "UpdatedAtUtc");
+            entity.HasIndex("TenantId", "RunId", "UpdatedAtUtc", "Id");
             entity.ToTable("IntegrationRecordProjections");
         });
 

@@ -50,6 +50,8 @@ sequenceDiagram
 - A replica-wide, per-connection token bucket and concurrency gate protect each destination across simultaneous runs; Terraform holds the Worker at one replica until coordination is distributed.
 - Exponential backoff, jitter, and `Retry-After` are honored only after a connector proves the prior request did not commit.
 - Repeated confirmed failures open a per-connection circuit; ambiguous outcomes still go directly to reconciliation.
+- Operator queries use tenant-prefixed composite indexes and opaque `(timestamp, ID)` keyset cursors; page size is bounded to 100.
+- Record status views are evaluated in SQL, preventing successful record histories from being downloaded merely to display exceptions.
 
 This is not exactly-once delivery. It is an explicit duplicate-avoidance protocol with a human reconciliation path for unknowable external outcomes.
 

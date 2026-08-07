@@ -6,6 +6,8 @@ import type {
   ConnectionProfile,
   CreateConnectionProfileRequest,
   ConnectionTest,
+  PagedResult,
+  RunFilters,
 } from './types'
 import { authenticatedFetch } from './auth'
 
@@ -45,9 +47,11 @@ export async function createConnection(request: CreateConnectionProfileRequest):
   return response.json() as Promise<ConnectionProfile>
 }
 
-export async function listRunRecords(runId: string): Promise<IntegrationRecordResult[]> {
-  const response = await ensureSuccess(await authenticatedFetch(`${apiBaseUrl}/api/integration-runs/${runId}/records`))
-  return response.json() as Promise<IntegrationRecordResult[]>
+export async function listRunRecords(runId: string, view: string, cursor?: string): Promise<PagedResult<IntegrationRecordResult>> {
+  const query = new URLSearchParams({ view, pageSize: '25' })
+  if (cursor) query.set('cursor', cursor)
+  const response = await ensureSuccess(await authenticatedFetch(`${apiBaseUrl}/api/integration-runs/${runId}/records?${query}`))
+  return response.json() as Promise<PagedResult<IntegrationRecordResult>>
 }
 
 export async function resolveIssue(id: string, resolutionNotes: string): Promise<IntegrationRecordResult> {
@@ -57,9 +61,11 @@ export async function resolveIssue(id: string, resolutionNotes: string): Promise
   return response.json() as Promise<IntegrationRecordResult>
 }
 
-export async function listIntegrationRuns(): Promise<IntegrationRun[]> {
-  const response = await ensureSuccess(await authenticatedFetch(`${apiBaseUrl}/api/integration-runs`))
-  return response.json() as Promise<IntegrationRun[]>
+export async function listIntegrationRuns(filters: RunFilters = {}): Promise<PagedResult<IntegrationRun>> {
+  const query = new URLSearchParams()
+  for (const [key, value] of Object.entries(filters)) if (value) query.set(key, String(value))
+  const response = await ensureSuccess(await authenticatedFetch(`${apiBaseUrl}/api/integration-runs?${query}`))
+  return response.json() as Promise<PagedResult<IntegrationRun>>
 }
 
 export async function submitIntegrationRun(

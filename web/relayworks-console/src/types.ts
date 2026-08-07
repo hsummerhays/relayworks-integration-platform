@@ -33,6 +33,21 @@ export interface SubmitIntegrationRunResult {
   isDuplicate: boolean
 }
 
+export interface PagedResult<T> {
+  items: T[]
+  nextCursor: string | null
+  pageSize: number
+}
+
+export interface RunFilters {
+  status?: IntegrationRunStatus
+  connectionId?: string
+  fromUtc?: string
+  toUtc?: string
+  cursor?: string
+  pageSize?: number
+}
+
 export type RecordResultStatus =
   | 'Processing' | 'Succeeded' | 'Rejected' | 'RetryableFailure' | 'UnknownOutcome' | 'ManuallyResolved'
 

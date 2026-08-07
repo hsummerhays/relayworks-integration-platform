@@ -22,6 +22,8 @@ public sealed class RelayWorksDbContext(DbContextOptions<RelayWorksDbContext> op
         runs.Property(run => run.Status).HasConversion<string>().HasMaxLength(40);
         runs.HasIndex(run => new { run.TenantId, run.IdempotencyKey }).IsUnique();
         runs.HasIndex(run => new { run.TenantId, run.CreatedAtUtc });
+        runs.HasIndex(run => new { run.TenantId, run.Status, run.CreatedAtUtc, run.Id });
+        runs.HasIndex(run => new { run.TenantId, run.ConnectionId, run.CreatedAtUtc, run.Id });
 
         var outbox = modelBuilder.Entity<OutboxMessage>();
         outbox.ToTable("OutboxMessages");
@@ -44,6 +46,7 @@ public sealed class RelayWorksDbContext(DbContextOptions<RelayWorksDbContext> op
         records.Property(x => x.ResolutionNotes).HasMaxLength(2000);
         records.HasIndex(x => new { x.RunId, x.SourceRecordId, x.SourceVersion }).IsUnique();
         records.HasIndex(x => new { x.TenantId, x.Status, x.UpdatedAtUtc });
+        records.HasIndex(x => new { x.TenantId, x.RunId, x.UpdatedAtUtc, x.Id });
 
         var connections = modelBuilder.Entity<ConnectionProfile>();
         connections.ToTable("ConnectionProfiles");

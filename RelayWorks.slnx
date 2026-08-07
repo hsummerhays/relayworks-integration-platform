@@ -8,6 +8,7 @@
     <Project Path="src/RelayWorks.Sync.Worker/RelayWorks.Sync.Worker.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/RelayWorks.Application.Tests/RelayWorks.Application.Tests.csproj" />
     <Project Path="tests/RelayWorks.Domain.Tests/RelayWorks.Domain.Tests.csproj" />
     <Project Path="tests/RelayWorks.Sync.Worker.Tests/RelayWorks.Sync.Worker.Tests.csproj" />
   </Folder>
