@@ -1,0 +1,50 @@
+name: RelayWorks Service Bus E2E
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "src/RelayWorks.Contracts/**"
+      - "src/RelayWorks.Sync.Worker/**"
+      - "tests/RelayWorks.ServiceBus.E2E.Tests/**"
+      - ".compose/service-bus/**"
+      - ".github/workflows/service-bus-e2e.yml"
+  pull_request:
+    paths:
+      - "src/RelayWorks.Contracts/**"
+      - "src/RelayWorks.Sync.Worker/**"
+      - "tests/RelayWorks.ServiceBus.E2E.Tests/**"
+      - ".compose/service-bus/**"
+      - ".github/workflows/service-bus-e2e.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  worker-message-flow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      MSSQL_SA_PASSWORD: RelayWorks-E2E-Sql-2026!
+      SERVICEBUS_EMULATOR_CONNECTION_STRING: Endpoint=sb://localhost;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;
+      SERVICEBUS_E2E_SQL_CONNECTION_STRING: Server=localhost,1433;Database=RelayWorksWorkerE2E;User Id=sa;Password=RelayWorks-E2E-Sql-2026!;TrustServerCertificate=True
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Start emulators
+        run: docker compose -f .compose/service-bus/docker-compose.yml up -d --wait
+      - name: Verify Service Bus health
+        run: curl --fail --retry 20 --retry-delay 3 http://localhost:5300/health
+      - name: Restore E2E tests
+        run: dotnet restore tests/RelayWorks.ServiceBus.E2E.Tests/RelayWorks.ServiceBus.E2E.Tests.csproj
+      - name: Run E2E tests
+        run: dotnet test tests/RelayWorks.ServiceBus.E2E.Tests/RelayWorks.ServiceBus.E2E.Tests.csproj --configuration Release --no-restore
+      - name: Capture container logs
+        if: failure()
+        run: docker compose -f .compose/service-bus/docker-compose.yml logs --no-color
+      - name: Stop emulators
+        if: always()
+        run: docker compose -f .compose/service-bus/docker-compose.yml down --volumes

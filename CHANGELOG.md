@@ -1,5 +1,12 @@
 # Changelog
 
+## Iteration 15 — 2026-08-07
+
+- Added a dedicated Azure Service Bus Emulator end-to-end test lane, isolated from the fast unit-test suite.
+- Exercised the production command worker and Worker outbox publisher over real AMQP messaging with a relational SQL ledger.
+- Verified command JSON compatibility, inbox persistence, delivery-ledger persistence, record-result and completion events, and redelivery idempotency.
+- Added deterministic emulator entities, health gating, failure log capture, bounded CI execution, and unconditional container cleanup.
+
 ## Post-Iteration 14 maintenance — 2026-08-07
 
 - Replaced process-global environment-variable mutations in Control Plane integration tests with environment-specific `appsettings.Testing.json`.

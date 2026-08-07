@@ -1,6 +1,6 @@
 # RelayWorks Integration Platform
 
-RelayWorks is a .NET and Vue reference platform for reliable construction-system integrations. Iteration 14 hardens relational testing, archive concurrency safety, CI, and approval-gated deployment planning.
+RelayWorks is a .NET and Vue reference platform for reliable construction-system integrations. Iteration 15 adds broker-level Worker verification with the Azure Service Bus Emulator while preserving the fast unit-test lane.
 
 ## Implemented vertical slice
 
@@ -45,6 +45,8 @@ terraform init -backend=false
 terraform validate
 ```
 
+The slower Worker messaging test runs separately through `.github/workflows/service-bus-e2e.yml` because it requires the Azure Service Bus Emulator and SQL Server containers. It can also be run locally with Docker Compose from `.compose/service-bus` and the two connection-string environment variables defined in that workflow.
+
 Both EF Core migration sets are intended to run from an approved deployment job. Terraform provisions databases and identities but does not execute schema migrations.
 
 ## Status
@@ -66,7 +68,7 @@ Both EF Core migration sets are intended to run from an approved deployment job.
 | Per-connection concurrency limits, token bucket, safe retries, and circuit breaker | Implemented |
 | Cursor-paged runs and records with status, connection, and date filtering | Implemented |
 | Verified Blob archival, dry-run retention, and lifecycle tiering | Implemented; destructive mode disabled by default |
-| Tenant-isolation, redelivery, retry-safety, circuit, and archive-policy tests | Implemented |
+| Tenant-isolation, redelivery, retry-safety, circuit, archive-policy, and Service Bus emulator tests | Implemented |
 | Terraform Azure environment | Implemented, not applied |
 | Real vendor connectors | Planned |
 | Distributed limiter coordination and durable long-delay retries | Planned |

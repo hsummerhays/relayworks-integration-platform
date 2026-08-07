@@ -2,7 +2,7 @@
 
 | Failure or threat | Required behavior | Automated evidence | Remaining environment test |
 | --- | --- | --- | --- |
-| Duplicate Service Bus command | Do not call the destination twice | `Redelivered_command_does_not_write_destination_twice` | Replay a real locked message after Worker restart |
+| Duplicate Service Bus command | Do not call the destination twice | Unit test plus `BrokerRedeliveryPreservesTheDurableDeliveryGate` over the Service Bus Emulator | Replay a real locked message after Worker restart |
 | Timeout after destination send | Mark `UnknownOutcome`; never retry | `Never_retries_an_unknown_outcome` | Inject network loss after provider accepts request |
 | Confirmed HTTP 429/no commit | Honor `Retry-After` and retry within bound | `Retries_only_confirmed_no_commit_and_honors_retry_after` | Provider sandbox quota test |
 | Repeated confirmed failures | Open circuit and stop destination traffic | `Open_circuit_stops_calls_after_confirmed_failure_threshold` | Observe Azure Monitor circuit metric and recovery |
@@ -22,6 +22,6 @@
 
 The CI workflow restores, builds, and tests the complete solution before separately building Vue and validating Terraform. A failure drill is not considered passed merely because a unit test models it; the final column identifies infrastructure behavior that requires a deployed environment.
 
-## Next end-to-end test
+## Service Bus end-to-end lane
 
-Add a separate CI job using the Azure Service Bus Emulator and SQL Server Testcontainers. It should submit an outbox-backed command, publish it through the emulator, verify Worker inbox and delivery-ledger writes, publish result events, update the Control Plane projection, and redeliver the command to prove that the destination write is not repeated. Keep this slower container topology outside the fast unit-test lane.
+The separate `service-bus-e2e.yml` workflow starts the Azure Service Bus Emulator and its SQL Server dependency, executes the production Worker command consumer and outbox publisher, and verifies inbox, delivery-ledger, result-event, completion-event, and redelivery behavior. It remains outside the fast unit-test lane. A deployed-environment drill is still required to validate Azure Service Bus lock loss, managed identity, networking, and restart behavior that the emulator does not reproduce.
