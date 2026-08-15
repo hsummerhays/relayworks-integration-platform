@@ -75,7 +75,7 @@ public sealed class TimeEntryProcessorTests
         : ITimeEntryDestinationConnectorFactory
     {
         public Task<ITimeEntryDestinationConnector> CreateAsync(ConnectorExecutionProfileV1 profile,
-            CancellationToken cancellationToken) => Task.FromResult(connector);
+            Guid tenantId, Guid connectionId, CancellationToken cancellationToken) => Task.FromResult(connector);
     }
 
     private static DestinationResilienceExecutor Resilience()

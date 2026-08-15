@@ -30,7 +30,7 @@ public sealed class ConnectionTestProcessorTests
     private sealed class Factory : ITimeEntryDestinationConnectorFactory
     {
         public Task<ITimeEntryDestinationConnector> CreateAsync(ConnectorExecutionProfileV1 profile,
-            CancellationToken cancellationToken) => Task.FromResult<ITimeEntryDestinationConnector>(new Connector());
+            Guid tenantId, Guid connectionId, CancellationToken cancellationToken) => Task.FromResult<ITimeEntryDestinationConnector>(new Connector());
     }
     private sealed class Connector : ITimeEntryDestinationConnector
     {

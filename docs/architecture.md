@@ -39,6 +39,9 @@ sequenceDiagram
 - The gate is persisted before the destination call.
 - Terminal rows prevent a second destination call.
 - An interrupted or timed-out call becomes `UnknownOutcome`, never an automatic retry.
+- Adapters report objective outcome states (`Succeeded`, `Rejected`, `ConfirmedNoCommit`, `UnknownOutcome`) and never perform internal retries.
+- Provider adapters are decoupled from storage and Key Vault, resolving via `IAdapterRegistry` with context injected through `ConnectorContext`.
+- Connector authentication strategies (`ApiKey`, `Basic`, `OAuth2`, `MutualTls`) operate through `IConnectorAuthenticator` and `IConnectorAuthenticatorFactory`, with token caching scoped to tenant and connection identity.
 - Worker events use a transactional outbox; Control projections use a natural unique key and upsert.
 - Connection capabilities are snapshotted into each command; only proven no-commit failures are retryable.
 - Read-after-write recovery can convert an unknown outcome to success only when the connector proves the destination record exists.

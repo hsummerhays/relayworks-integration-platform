@@ -1,6 +1,6 @@
 # RelayWorks Integration Platform
 
-RelayWorks is a .NET and Vue reference platform for reliable construction-system integrations. Iteration 17 hardens the complete broker round trip with explicit poison-message classification and safe dead-letter behavior.
+RelayWorks is a .NET and Vue reference platform for reliable construction-system integrations. Iteration 19 establishes a formal provider adapter architecture with dynamic adapter registry and pluggable connector authentication strategies.
 
 ## Implemented vertical slice
 
@@ -8,9 +8,10 @@ RelayWorks is a .NET and Vue reference platform for reliable construction-system
 2. The Control Plane saves the run and command outbox in one Azure SQL transaction.
 3. Azure Service Bus delivers `IntegrationRunRequestedV1` at least once.
 4. Before each destination call, the Worker acquires a unique record delivery gate in its own database.
-5. The Worker persists record outcomes and versioned result events in one database transaction.
-6. The Control Plane builds an operator-facing projection of rejected and ambiguous records.
-7. `UnknownOutcome` records stop until a human verifies the destination and documents resolution.
+5. The Worker resolves the target adapter via `IAdapterRegistry` and configures authentication (`IConnectorAuthenticator`).
+6. The Worker persists record outcomes and versioned result events in one database transaction.
+7. The Control Plane builds an operator-facing projection of rejected and ambiguous records.
+8. `UnknownOutcome` records stop until a human verifies the destination and documents resolution.
 
 The connectors are simulations. RelayWorks does not claim a production FieldFlo, Sage, QuickBooks, or other vendor connector.
 
@@ -62,15 +63,19 @@ Both EF Core migration sets are intended to run from an approved deployment job.
 | Confirmed-no-commit retry and read-after-write recovery | Implemented with simulated connector |
 | Coalesced Key Vault cache and configurable vault routing | Implemented |
 | Worker-executed connection tests with durable polling | Implemented |
-| Entra SPA/API authentication and app-role authorization | Implemented; registrations not provisioned |
-| Distributed traces, connector metrics, and business correlation | Implemented |
-| SQL/outbox readiness probe and Azure Monitor alerts | Implemented, not applied |
+| Entra SPA/API authentication and app-role authorization | Implemented & provisioned with claims mapping |
+| Distributed traces, connector metrics, and business correlation | Implemented & verified live in App Insights |
+| SQL/outbox readiness probe and Azure Monitor alerts | Implemented & provisioned in Azure |
 | Per-connection concurrency limits, token bucket, safe retries, and circuit breaker | Implemented |
 | Cursor-paged runs and records with status, connection, and date filtering | Implemented |
 | Verified Blob archival, dry-run retention, and lifecycle tiering | Implemented; destructive mode disabled by default |
 | Tenant-isolation, redelivery, retry-safety, circuit, archive-policy, and full Service Bus round-trip tests | Implemented |
-| Safe poison-command classification and dead-letter verification | Implemented |
-| Terraform Azure environment | Implemented, not applied |
+| Safe poison-command classification and dead-letter verification | Implemented (ADR 0014) |
+| Connector authentication strategies (ApiKey, Basic, OAuth2, MutualTls) | Implemented (Iteration 18) |
+| Provider adapter architecture and dynamic adapter registry | Implemented (Iteration 19, ADR 0015) |
+| Terraform state backend bootstrap with Entra auth & recovery protections | Applied (Iteration 17.5) |
+| Terraform Azure environment with cost controls ($50 budget, 0.1GB quota, scale-to-zero) | Applied & live on Azure Container Apps (Iteration 17.5) |
+| Dedicated Container Apps Job for private SQL EF migrations & user bootstrap | Implemented & executed (Iteration 17.5) |
 | Real vendor connectors | Planned |
 | Distributed limiter coordination and durable long-delay retries | Planned |
 

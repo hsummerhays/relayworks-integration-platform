@@ -28,7 +28,7 @@ public sealed class TimeEntryProcessor(
 
         var reported = new List<IntegrationRecordResultV1>();
         var profile = command.ConnectorProfile ?? throw new InvalidOperationException("A connector profile snapshot is required.");
-        var destinationConnector = await destinationFactory.CreateAsync(profile, cancellationToken);
+        var destinationConnector = await destinationFactory.CreateAsync(profile, command.TenantId, command.ConnectionId, cancellationToken);
         foreach (var entry in sourceConnector.Read(command))
             reported.Add(await ProcessRecord(command, entry, profile, destinationConnector, completedAtUtc, cancellationToken));
         foreach (var result in reported)
