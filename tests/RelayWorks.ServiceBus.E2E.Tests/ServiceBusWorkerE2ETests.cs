@@ -11,6 +11,9 @@ using RelayWorks.Infrastructure.IntegrationRuns;
 using RelayWorks.Infrastructure.Messaging;
 using RelayWorks.Infrastructure.Persistence;
 using RelayWorks.Sync.Worker;
+using RelayWorks.Sync.Worker.Adapters;
+using RelayWorks.Sync.Worker.Authentication;
+using RelayWorks.Sync.Worker.Connectors;
 using RelayWorks.Sync.Worker.Persistence;
 using RelayWorks.Sync.Worker.Resilience;
 using ControlPlaneServiceBusOptions = RelayWorks.Infrastructure.Messaging.ServiceBusOptions;
@@ -133,7 +136,11 @@ public sealed class ServiceBusWorkerE2ETests
             .AddDbContext<WorkerLedgerDbContext>(options => options.UseSqlServer(workerSqlConnection))
             .AddDbContext<RelayWorksDbContext>(options => options.UseSqlServer(controlSqlConnection))
             .AddScoped<IIntegrationRunRepository, SqlIntegrationRunRepository>()
-            .AddScoped<ITimeEntrySourceConnector, SimulatedFieldOperationsConnector>()
+            .AddSingleton<ITimeEntrySourceAdapter, SimulatedFieldOperationsAdapter>()
+            .AddSingleton<ITimeEntryDestinationAdapter, SimulatedAccountingAdapter>()
+            .AddSingleton<ITimeEntryDestinationAdapter, FieldFloAccountingAdapter>()
+            .AddSingleton<IAdapterRegistry, AdapterRegistry>()
+            .AddScoped<ITimeEntrySourceConnector, RegistryTimeEntrySourceConnector>()
             .AddSingleton<ITimeEntryDestinationConnectorFactory>(new FixedConnectorFactory(destination))
             .AddSingleton<IOptions<ConnectorResilienceOptions>>(resilienceOptions)
             .AddSingleton<IResilienceDelay>(delay)
@@ -299,7 +306,7 @@ public sealed class ServiceBusWorkerE2ETests
         : ITimeEntryDestinationConnectorFactory
     {
         public Task<ITimeEntryDestinationConnector> CreateAsync(ConnectorExecutionProfileV1 profile,
-            CancellationToken cancellationToken) => Task.FromResult(connector);
+            Guid tenantId, Guid connectionId, CancellationToken cancellationToken) => Task.FromResult(connector);
     }
 
     private sealed class CountingDestination : ITimeEntryDestinationConnector

@@ -1,5 +1,8 @@
 using Azure.Messaging.ServiceBus;
 using RelayWorks.Sync.Worker;
+using RelayWorks.Sync.Worker.Adapters;
+using RelayWorks.Sync.Worker.Authentication;
+using RelayWorks.Sync.Worker.Connectors;
 using RelayWorks.Sync.Worker.Persistence;
 using Microsoft.EntityFrameworkCore;
 using RelayWorks.Sync.Worker.Secrets;
@@ -47,12 +50,17 @@ var retention = builder.Configuration.GetSection(WorkerRetentionOptions.SectionN
 builder.Services.AddOptions<WorkerRetentionOptions>().Bind(builder.Configuration.GetSection(WorkerRetentionOptions.SectionName))
     .Validate(options => options.DispatchedOutboxDays >= 7 && options.CompletedInboxDays >= 30 && options.IntervalMinutes > 0,
         "Worker retention values are outside safe bounds.").ValidateOnStart();
-if (retention.Enabled) builder.Services.AddHostedService<WorkerRetentionService>();
-builder.Services.AddScoped<ITimeEntrySourceConnector, SimulatedFieldOperationsConnector>();
+builder.Services.AddSingleton<ITimeEntrySourceAdapter, SimulatedFieldOperationsAdapter>();
+builder.Services.AddSingleton<ITimeEntryDestinationAdapter, SimulatedAccountingAdapter>();
+builder.Services.AddSingleton<ITimeEntryDestinationAdapter, FieldFloAccountingAdapter>();
+builder.Services.AddSingleton<IAdapterRegistry, AdapterRegistry>();
+builder.Services.AddScoped<ITimeEntrySourceConnector, RegistryTimeEntrySourceConnector>();
+builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<ISecretValueProvider, KeyVaultSecretValueProvider>();
 builder.Services.AddSingleton<ISecretLocatorRouter, ConfiguredSecretLocatorRouter>();
 builder.Services.AddSingleton<CachedSecretResolver>();
+builder.Services.AddSingleton<IConnectorAuthenticatorFactory, ConnectorAuthenticatorFactory>();
 builder.Services.AddScoped<ITimeEntryDestinationConnectorFactory, TimeEntryDestinationConnectorFactory>();
 builder.Services.AddHostedService<IntegrationCommandWorker>();
 builder.Services.AddHostedService<WorkerOutboxPublisher>();

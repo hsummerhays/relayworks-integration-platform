@@ -1,15 +1,23 @@
+using System.Collections.Concurrent;
 using RelayWorks.Contracts.TimeEntries;
-using RelayWorks.Sync.Worker.Authentication;
 
-namespace RelayWorks.Sync.Worker;
+namespace RelayWorks.Sync.Worker.Adapters;
 
-public sealed class SimulatedAccountingConnector(IConnectorAuthenticator? authenticator = null) : ITimeEntryDestinationConnector
+public sealed class SimulatedAccountingAdapter : ITimeEntryDestinationAdapter
 {
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> Committed = [];
-    public IConnectorAuthenticator? Authenticator => authenticator;
+    private static readonly ConcurrentDictionary<string, string> Committed = new(StringComparer.Ordinal);
 
+    public string Provider => "SimulatedAccounting";
 
-    public Task<DestinationWriteResult> WriteAsync(CanonicalTimeEntryV1 entry, string idempotencyKey,
+    public ConnectorCapabilities Capabilities { get; } = new(
+        SupportsIdempotencyKey: true,
+        SupportsReadAfterWrite: true,
+        DefaultMaxConfirmedNoCommitRetries: 2);
+
+    public Task<DestinationWriteResult> WriteAsync(
+        CanonicalTimeEntryV1 entry,
+        string idempotencyKey,
+        ConnectorContext context,
         CancellationToken cancellationToken)
     {
         var errors = new List<string>();
@@ -22,8 +30,6 @@ public sealed class SimulatedAccountingConnector(IConnectorAuthenticator? authen
             return Task.FromResult(new DestinationWriteResult(DestinationWriteStatus.Rejected,
                 ErrorCode: errors[0], ErrorMessage: string.Join(", ", errors)));
 
-        // The simulator makes explicit what a real connector must report: a timeout after
-        // submission is not a failure and must not be retried without reconciliation.
         if (entry.SourceRecordId.EndsWith("000013", StringComparison.Ordinal))
             return Task.FromResult(new DestinationWriteResult(DestinationWriteStatus.ConfirmedNoCommit,
                 ErrorCode: "DESTINATION_RATE_LIMITED",
@@ -44,21 +50,28 @@ public sealed class SimulatedAccountingConnector(IConnectorAuthenticator? authen
         return Task.FromResult(new DestinationWriteResult(DestinationWriteStatus.Succeeded, reference));
     }
 
-    public Task<DestinationLookupResult> FindByIdempotencyKeyAsync(string idempotencyKey,
-        CancellationToken cancellationToken) => Task.FromResult(
-        Committed.TryGetValue(idempotencyKey, out var reference)
+    public Task<DestinationLookupResult> FindExistingAsync(
+        string idempotencyKey,
+        ConnectorContext context,
+        CancellationToken cancellationToken) =>
+        Task.FromResult(Committed.TryGetValue(idempotencyKey, out var reference)
             ? new DestinationLookupResult(true, reference)
             : new DestinationLookupResult(false));
 
-    public async Task<ConnectorHealthResult> TestConnectionAsync(CancellationToken cancellationToken)
+    public async Task<ConnectorHealthResult> TestConnectionAsync(
+        ConnectorContext context,
+        CancellationToken cancellationToken)
     {
-        if (authenticator is not null)
+        if (context.Authenticator is not null)
         {
-            var valid = await authenticator.ValidateAsync(cancellationToken);
+            var valid = await context.Authenticator.ValidateAsync(cancellationToken);
             if (!valid)
-            {
                 return new(false, FailureCategory: "AuthenticationFailed", SafeMessage: "Connector authentication strategy validation failed.");
-            }
+
+            // Wire up HttpClient handler configuration (e.g. attaching client certificate for mTLS)
+            using var clientHandler = new HttpClientHandler();
+            using var testClient = new HttpClient(clientHandler);
+            context.Authenticator.ConfigureClient(testClient, clientHandler);
         }
 
         await Task.Delay(150, cancellationToken);

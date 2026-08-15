@@ -22,7 +22,7 @@ public sealed partial class ConnectionTestProcessor(ITimeEntryDestinationConnect
         string status; string? category = null; string? safeMessage;
         try
         {
-            var connector = await factory.CreateAsync(command.ConnectorProfile, timeout.Token);
+            var connector = await factory.CreateAsync(command.ConnectorProfile, command.TenantId, command.ConnectionId, timeout.Token);
             var health = await connector.TestConnectionAsync(timeout.Token);
             status = health.Succeeded ? "Succeeded" : "Failed";
             category = health.FailureCategory; safeMessage = health.SafeMessage;
