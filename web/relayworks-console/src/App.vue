@@ -33,7 +33,7 @@ const resolutionNotes = reactive<Record<string, string>>({})
 const connectionTests = reactive<Record<string, ConnectionTest>>({})
 const connectionForm = reactive<CreateConnectionProfileRequest>({
   id: crypto.randomUUID(), name: '',
-  provider: 'FieldFloAccounting', supportsIdempotencyKey: true, supportsReadAfterWrite: true,
+  provider: 'FieldFloAccounting', authType: 'ApiKey', supportsIdempotencyKey: true, supportsReadAfterWrite: true,
   maxConfirmedNoCommitRetries: 2, secretReference: '',
 })
 
@@ -220,13 +220,14 @@ onMounted(async () => {
         <summary><span><span class="eyebrow">Connector registry</span><strong>{{ connections.length }} configured connection{{ connections.length === 1 ? '' : 's' }}</strong></span><span>Manage capabilities</span></summary>
         <div class="connection-grid">
           <article v-for="connection in connections" :key="connection.id" class="connection-card">
-            <div><strong>{{ connection.name }}</strong><small>{{ connection.provider }} · {{ connection.configurationVersion.slice(0, 8) }}</small><small v-if="connectionTests[connection.id]" class="test-result" :data-status="connectionTests[connection.id].status">{{ formatStatus(connectionTests[connection.id].status) }}<template v-if="connectionTests[connection.id].safeMessage"> · {{ connectionTests[connection.id].safeMessage }}</template><template v-if="connectionTests[connection.id].completedAtUtc"> · {{ formatDate(connectionTests[connection.id].completedAtUtc!) }}<template v-if="connectionTests[connection.id].durationMilliseconds"> ({{ connectionTests[connection.id].durationMilliseconds }} ms)</template></template></small></div>
-            <div class="capabilities"><span class="enabled">Credential configured</span><span :class="{ enabled: connection.supportsIdempotencyKey }">Idempotency key</span><span :class="{ enabled: connection.supportsReadAfterWrite }">Read after write</span><span>{{ connection.maxConfirmedNoCommitRetries }} safe retries</span></div>
+            <div><strong>{{ connection.name }}</strong><small>{{ connection.provider }} · {{ connection.authType }} · {{ connection.configurationVersion.slice(0, 8) }}</small><small v-if="connectionTests[connection.id]" class="test-result" :data-status="connectionTests[connection.id].status">{{ formatStatus(connectionTests[connection.id].status) }}<template v-if="connectionTests[connection.id].safeMessage"> · {{ connectionTests[connection.id].safeMessage }}</template><template v-if="connectionTests[connection.id].completedAtUtc"> · {{ formatDate(connectionTests[connection.id].completedAtUtc!) }}<template v-if="connectionTests[connection.id].durationMilliseconds"> ({{ connectionTests[connection.id].durationMilliseconds }} ms)</template></template></small></div>
+            <div class="capabilities"><span class="enabled">{{ connection.authType }} Auth</span><span class="enabled">Secret Configured</span><span :class="{ enabled: connection.supportsIdempotencyKey }">Idempotency key</span><span :class="{ enabled: connection.supportsReadAfterWrite }">Read after write</span><span>{{ connection.maxConfirmedNoCommitRetries }} safe retries</span></div>
             <button class="secondary-button test-button" :disabled="!canOperate || connectionTests[connection.id]?.status === 'Pending'" @click="testConnection(connection)">{{ connectionTests[connection.id]?.status === 'Pending' ? 'Testing…' : 'Test connection' }}</button>
           </article>
           <form v-if="canAdmin" class="connection-form" @submit.prevent="saveConnection">
             <label>Connection name<input v-model.trim="connectionForm.name" required placeholder="FieldFlo → Sage 100" /></label>
             <label>Provider<input v-model.trim="connectionForm.provider" required /></label>
+            <label>Authentication strategy<select v-model="connectionForm.authType"><option value="ApiKey">API Key (Header)</option><option value="OAuth2">OAuth 2.0 (Client Credentials)</option><option value="Basic">Basic Auth (Base64)</option><option value="MutualTls">Mutual TLS (Certificate)</option></select></label>
             <label>Key Vault secret URI<input v-model.trim="connectionForm.secretReference" required placeholder="https://vault.vault.azure.net/secrets/customer" /></label>
             <label class="check"><input v-model="connectionForm.supportsIdempotencyKey" type="checkbox" /> Native idempotency key</label>
             <label class="check"><input v-model="connectionForm.supportsReadAfterWrite" type="checkbox" /> Read-after-write lookup</label>

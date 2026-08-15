@@ -53,6 +53,7 @@ public sealed class RelayWorksDbContext(DbContextOptions<RelayWorksDbContext> op
         connections.HasKey(x => x.Id);
         connections.Property(x => x.Name).HasMaxLength(160);
         connections.Property(x => x.Provider).HasMaxLength(100);
+        connections.Property(x => x.AuthType).HasConversion<string>().HasMaxLength(40);
         connections.Property(x => x.SecretReference).HasMaxLength(300);
         connections.Property(x => x.ConfigurationVersion).HasMaxLength(32);
         connections.HasIndex(x => new { x.TenantId, x.Name }).IsUnique();

@@ -77,6 +77,7 @@ public sealed class RelayWorksDbContextModelSnapshot : ModelSnapshot
             entity.Property<int>("MaxConfirmedNoCommitRetries").HasColumnType("int");
             entity.Property<string>("Name").IsRequired().HasMaxLength(160).HasColumnType("nvarchar(160)");
             entity.Property<string>("Provider").IsRequired().HasMaxLength(100).HasColumnType("nvarchar(100)");
+            entity.Property<string>("AuthType").IsRequired().HasMaxLength(40).HasColumnType("nvarchar(40)");
             entity.Property<string>("SecretReference").IsRequired().HasMaxLength(300).HasColumnType("nvarchar(300)");
             entity.Property<bool>("SupportsIdempotencyKey").HasColumnType("bit");
             entity.Property<bool>("SupportsReadAfterWrite").HasColumnType("bit");
