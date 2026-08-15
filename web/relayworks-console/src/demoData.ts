@@ -70,7 +70,8 @@ export const demoRecords: IntegrationRecordResult[] = [
 
 export const demoConnections: ConnectionProfile[] = [{
   id: '857840a1-3440-431d-a696-07616926d50b', tenantId, name: 'FieldFlo → Accounting',
-  provider: 'SimulatedAccounting', supportsIdempotencyKey: true, supportsReadAfterWrite: true,
+  provider: 'SimulatedAccounting', authType: 'ApiKey', supportsIdempotencyKey: true, supportsReadAfterWrite: true,
   maxConfirmedNoCommitRetries: 2, secretReference: 'https://relayworks-dev.vault.azure.net/secrets/fieldflo-accounting',
   configurationVersion: '8d3fa8e2', isActive: true, updatedAtUtc: '2026-08-06T17:10:00Z',
 }]
+

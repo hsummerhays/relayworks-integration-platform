@@ -10,13 +10,23 @@ public sealed record IntegrationRunRequestedV1(
     DateTimeOffset OccurredAtUtc,
     ConnectorExecutionProfileV1? ConnectorProfile = null);
 
+public enum ConnectorAuthenticationType
+{
+    ApiKey,
+    Basic,
+    OAuth2,
+    MutualTls
+}
+
 public sealed record ConnectorExecutionProfileV1(
     string Provider,
     bool SupportsIdempotencyKey,
     bool SupportsReadAfterWrite,
     int MaxConfirmedNoCommitRetries,
     string ConfigurationVersion,
-    SecretLocatorV1 Secret);
+    SecretLocatorV1 Secret,
+    ConnectorAuthenticationType AuthType = ConnectorAuthenticationType.ApiKey);
+
 
 public sealed record SecretLocatorV1(
     Uri VaultUri,

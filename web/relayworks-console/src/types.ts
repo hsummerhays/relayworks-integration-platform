@@ -67,11 +67,14 @@ export interface IntegrationRecordResult {
   updatedAtUtc: string
 }
 
+export type ConnectorAuthenticationType = 'ApiKey' | 'Basic' | 'OAuth2' | 'MutualTls'
+
 export interface ConnectionProfile {
   id: string
   tenantId: string
   name: string
   provider: string
+  authType: ConnectorAuthenticationType
   supportsIdempotencyKey: boolean
   supportsReadAfterWrite: boolean
   maxConfirmedNoCommitRetries: number
@@ -82,6 +85,7 @@ export interface ConnectionProfile {
 }
 
 export type CreateConnectionProfileRequest = Omit<ConnectionProfile, 'tenantId' | 'configurationVersion' | 'isActive' | 'updatedAtUtc'>
+
 
 export type ConnectionTestStatus = 'Pending' | 'Succeeded' | 'Failed' | 'TimedOut' | 'Canceled'
 export interface ConnectionTest {

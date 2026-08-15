@@ -190,6 +190,7 @@ connections.MapPost("/", async (CreateConnectionProfileRequest request, RelayWor
     {
         var tenantId = tenantContext.RequireTenantId();
         var profile = ConnectionProfile.Create(request.Id, tenantId, request.Name, request.Provider,
+            request.AuthType,
             request.SupportsIdempotencyKey, request.SupportsReadAfterWrite,
             request.MaxConfirmedNoCommitRetries, request.SecretReference, timeProvider.GetUtcNow());
         db.ConnectionProfiles.Add(profile);
@@ -322,6 +323,7 @@ namespace RelayWorks.ControlPlane.Api
     public sealed record ResolveReconciliationIssueRequest(string ResolutionNotes);
 
     public sealed record CreateConnectionProfileRequest(Guid Id, string Name, string Provider,
+        ConnectorAuthenticationType AuthType,
         bool SupportsIdempotencyKey, bool SupportsReadAfterWrite, int MaxConfirmedNoCommitRetries,
         string SecretReference);
 }

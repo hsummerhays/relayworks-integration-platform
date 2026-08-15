@@ -8,6 +8,7 @@ public sealed class ConnectionProfile
     public Guid TenantId { get; init; }
     public string Name { get; private set; } = string.Empty;
     public string Provider { get; private set; } = string.Empty;
+    public ConnectorAuthenticationType AuthType { get; private set; } = ConnectorAuthenticationType.ApiKey;
     public bool SupportsIdempotencyKey { get; private set; }
     public bool SupportsReadAfterWrite { get; private set; }
     public int MaxConfirmedNoCommitRetries { get; private set; }
@@ -19,6 +20,7 @@ public sealed class ConnectionProfile
     private ConnectionProfile() { }
 
     public static ConnectionProfile Create(Guid id, Guid tenantId, string name, string provider,
+        ConnectorAuthenticationType authType,
         bool supportsIdempotencyKey, bool supportsReadAfterWrite, int maxRetries,
         string secretReference, DateTimeOffset now)
     {
@@ -29,6 +31,7 @@ public sealed class ConnectionProfile
         var profile = new ConnectionProfile
         {
             Id = id, TenantId = tenantId, Name = name.Trim(), Provider = provider.Trim(),
+            AuthType = authType,
             SupportsIdempotencyKey = supportsIdempotencyKey, SupportsReadAfterWrite = supportsReadAfterWrite,
             MaxConfirmedNoCommitRetries = maxRetries, SecretReference = secretReference.Trim(),
             ConfigurationVersion = Guid.NewGuid().ToString("N"), IsActive = true, UpdatedAtUtc = now
@@ -38,7 +41,8 @@ public sealed class ConnectionProfile
     }
 
     public ConnectorExecutionProfileV1 Snapshot() => new(Provider, SupportsIdempotencyKey,
-        SupportsReadAfterWrite, MaxConfirmedNoCommitRetries, ConfigurationVersion, ParseSecretReference());
+        SupportsReadAfterWrite, MaxConfirmedNoCommitRetries, ConfigurationVersion, ParseSecretReference(), AuthType);
+
 
     private SecretLocatorV1 ParseSecretReference()
     {
