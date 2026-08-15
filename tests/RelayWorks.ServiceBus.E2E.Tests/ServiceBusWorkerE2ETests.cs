@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Xunit;
 using RelayWorks.Application.Abstractions;
 using RelayWorks.Contracts.IntegrationRuns;
 using RelayWorks.Domain.IntegrationRuns;

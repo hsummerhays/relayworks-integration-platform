@@ -3,7 +3,7 @@ output "container_registry_login_server" {
 }
 
 output "control_plane_url" {
-  value = "https://${azurerm_container_app.control_plane.ingress[0].fqdn}"
+  value = var.deploy_applications ? "https://${azurerm_container_app.control_plane[0].ingress[0].fqdn}" : null
 }
 
 output "console_url" {
@@ -39,7 +39,7 @@ output "console_auth_build_settings" {
     VITE_AUTH_ENABLED    = "true"
     VITE_ENTRA_TENANT_ID = var.tenant_id
     VITE_ENTRA_CLIENT_ID = var.console_client_id
-    VITE_API_SCOPE       = "api://${var.control_plane_api_client_id}/access_as_user"
-    VITE_API_BASE_URL    = "https://${azurerm_container_app.control_plane.ingress[0].fqdn}"
+    VITE_API_SCOPE       = "${var.control_plane_api_identifier_uri}/access_as_user"
+    VITE_API_BASE_URL    = var.deploy_applications ? "https://${azurerm_container_app.control_plane[0].ingress[0].fqdn}" : null
   }
 }

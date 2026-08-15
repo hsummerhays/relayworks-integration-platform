@@ -80,11 +80,42 @@ AppDependencies
 | order by TimeGenerated desc
 ```
 
-## Safe replay checklist
+## Database migrations & bootstrap
 
-1. Identify the message ID, message type, run/test ID, and dead-letter reason.
-2. Confirm whether the Worker inbox marks the command complete.
-3. For integration commands, inspect every relevant delivery-ledger row.
-4. If any row is `Processing` after a crash or `UnknownOutcome`, verify the destination before changing state.
-5. Prefer repairing the underlying fault and redelivering the original message. Preserve its stable message identity and correlation context.
-6. Record any manual reconciliation in the Control Plane so the operator audit remains complete.
+RelayWorks uses a dedicated one-shot Azure Container Apps Job (`caj-relayworks-dev-migrations`) running within the delegated virtual network to apply EF Core migrations and provision contained database users for the application managed identities without requiring public SQL connectivity or passwords.
+
+1. The Azure SQL Server Active Directory Administrator is configured as the `RelayWorks SQL Administrators` security group containing Hugh and the migration user-assigned managed identity (`id-relayworks-dev-migrations`).
+2. The migration job runs the `RelayWorks.Migrations` project image:
+   - Applies EF Core migrations for both `RelayWorksDbContext` (`relayworks-control`) and `WorkerLedgerDbContext` (`relayworks-worker`).
+   - Provisions database users for `id-relayworks-dev-control` and `id-relayworks-dev-worker` with appropriate role memberships (`db_datareader`, `db_datawriter`, and `EXECUTE`).
+
+To run migrations on-demand:
+```bash
+az containerapp job start --name caj-relayworks-dev-migrations --resource-group rg-relayworks-dev
+```
+
+## Cost controls and environment shutdown
+
+In development, cost guards are configured to keep recurring cloud expenses bounded:
+- **Azure Consumption Budget**: $50/month with threshold email alerts at 50%, 75%, 90%, and 100%.
+- **Log Analytics Daily Ingestion Cap**: Set to `0.1 GB/day` to prevent runaway query logging or tracing loops.
+- **Archive Storage**: LRS replication for development history blobs.
+- **Compute Scale-to-Zero**: Control Plane and Sync Worker both support `min_replicas = 0`. The Sync Worker scales automatically via KEDA based on queue message backlog (`azure-servicebus` scale rule with `identity_id`).
+- **Standardized Tags**: All resources are tagged with `environment=dev`, `project=RelayWorks`, `owner=Hugh`, and `managed-by=terraform`.
+
+### One-command environment teardown / stop
+
+To destroy development workload infrastructure when not in active use while preserving the remote state container:
+
+```bash
+cd infra/environments/dev
+terraform destroy -auto-approve
+```
+
+To recreate and apply again later:
+```bash
+terraform plan -out=dev.tfplan
+terraform apply "dev.tfplan"
+```
+
+The dedicated bootstrap state backend (`rg-relayworks-tfstate`) remains intact independently.
