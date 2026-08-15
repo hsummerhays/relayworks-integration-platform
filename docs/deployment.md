@@ -4,6 +4,18 @@ CI must pass NuGet Audit during restore, .NET tests (including SQL Server Testco
 
 The deployment workflow creates a Terraform plan under a protected GitHub environment and preserves it as a short-lived immutable artifact. Applying infrastructure is intentionally a separate approval boundary. Container images should be addressed by digest, and database migration bundles should run from an approved job before application traffic moves to the new revision.
 
+## Terraform state backend bootstrap
+
+Remote state for environment modules is hosted in an Azure Blob Storage container (`tfstate`) within a dedicated state resource group (`rg-relayworks-tfstate`).
+
+The state backend storage account is provisioned via `infra/bootstrap/state` and enforces authoritative recovery protections:
+- Microsoft Entra ID authentication (`default_to_oauth_authentication = true`, `use_azuread_auth = true`) with shared access keys and local users disabled (`shared_access_key_enabled = false`, `local_user_enabled = false`).
+- Blob versioning enabled (`versioning_enabled = true`).
+- 30-day soft deletion retention for both individual blobs and containers.
+- Private blob container access (`container_access_type = "private"`).
+
+Environment deployments reference this state account using environment-specific `backend.hcl` files.
+
 ## Promotion order
 
 1. Build, scan, and push immutable Control Plane and Worker images.

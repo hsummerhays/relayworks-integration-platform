@@ -1,6 +1,7 @@
 provider "azurerm" {
   features {}
-  subscription_id = var.subscription_id
+  subscription_id        = var.subscription_id
+  storage_use_azuread    = true
 }
 
 resource "azurerm_resource_group" "state" {
@@ -17,6 +18,20 @@ resource "azurerm_storage_account" "state" {
   min_tls_version                 = "TLS1_2"
   shared_access_key_enabled       = false
   allow_nested_items_to_be_public = false
+  default_to_oauth_authentication = true
+  local_user_enabled              = false
+
+  blob_properties {
+    versioning_enabled = true
+
+    delete_retention_policy {
+      days = 30
+    }
+
+    container_delete_retention_policy {
+      days = 30
+    }
+  }
 }
 
 resource "azurerm_storage_container" "state" {

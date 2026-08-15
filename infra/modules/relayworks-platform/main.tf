@@ -16,7 +16,52 @@ resource "azurerm_log_analytics_workspace" "main" {
   resource_group_name = azurerm_resource_group.main.name
   sku                 = "PerGB2018"
   retention_in_days   = 30
+  daily_quota_gb      = var.log_analytics_daily_quota_gb
   tags                = var.tags
+}
+
+resource "azurerm_consumption_budget_resource_group" "main" {
+  name              = "budget-${local.name}"
+  resource_group_id = azurerm_resource_group.main.id
+
+  amount     = var.monthly_budget_amount
+  time_grain = "Monthly"
+
+  time_period {
+    start_date = var.budget_start_date
+  }
+
+  notification {
+    enabled        = true
+    threshold      = 50.0
+    operator       = "GreaterThanOrEqualTo"
+    threshold_type = "Actual"
+    contact_emails = var.budget_contact_emails
+  }
+
+  notification {
+    enabled        = true
+    threshold      = 75.0
+    operator       = "GreaterThanOrEqualTo"
+    threshold_type = "Actual"
+    contact_emails = var.budget_contact_emails
+  }
+
+  notification {
+    enabled        = true
+    threshold      = 90.0
+    operator       = "GreaterThanOrEqualTo"
+    threshold_type = "Actual"
+    contact_emails = var.budget_contact_emails
+  }
+
+  notification {
+    enabled        = true
+    threshold      = 100.0
+    operator       = "GreaterThanOrEqualTo"
+    threshold_type = "Actual"
+    contact_emails = var.budget_contact_emails
+  }
 }
 
 resource "azurerm_application_insights" "main" {
@@ -91,7 +136,7 @@ resource "azurerm_storage_account" "archive" {
   resource_group_name             = azurerm_resource_group.main.name
   location                        = azurerm_resource_group.main.location
   account_tier                    = "Standard"
-  account_replication_type        = "ZRS"
+  account_replication_type        = var.archive_account_replication_type
   min_tls_version                 = "TLS1_2"
   public_network_access_enabled   = false
   allow_nested_items_to_be_public = false
@@ -115,7 +160,10 @@ resource "azurerm_storage_management_policy" "archive" {
   rule {
     name    = "integration-history-lifecycle"
     enabled = true
-    filters { blob_types = ["blockBlob"] prefix_match = ["integration-history/tenant="] }
+    filters {
+      blob_types   = ["blockBlob"]
+      prefix_match = ["integration-history/tenant="]
+    }
     actions {
       base_blob {
         tier_to_cool_after_days_since_modification_greater_than    = 30
@@ -316,7 +364,7 @@ resource "azurerm_key_vault" "main" {
   resource_group_name        = azurerm_resource_group.main.name
   tenant_id                  = var.tenant_id
   sku_name                   = "standard"
-  enable_rbac_authorization  = true
+  rbac_authorization_enabled = true
   purge_protection_enabled   = true
   soft_delete_retention_days = 7
   tags                       = var.tags
@@ -384,7 +432,91 @@ resource "azurerm_role_assignment" "worker_key_vault_secrets" {
   principal_id         = azurerm_user_assigned_identity.sync_worker.principal_id
 }
 
+resource "azurerm_role_assignment" "key_vault_admin" {
+  count                = var.key_vault_admin_object_id != null ? 1 : 0
+  scope                = azurerm_key_vault.main.id
+  role_definition_name = "Key Vault Secrets Officer"
+  principal_id         = var.key_vault_admin_object_id
+}
+
+resource "azurerm_user_assigned_identity" "migrations" {
+  name                = "id-${local.name}-migrations"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  tags                = var.tags
+}
+
+resource "azurerm_role_assignment" "migrations_acr_pull" {
+  scope                = azurerm_container_registry.main.id
+  role_definition_name = "AcrPull"
+  principal_id         = azurerm_user_assigned_identity.migrations.principal_id
+}
+
+resource "azurerm_container_app_job" "migrations" {
+  name                         = "caj-${local.name}-migrations"
+  location                     = azurerm_resource_group.main.location
+  resource_group_name          = azurerm_resource_group.main.name
+  container_app_environment_id = azurerm_container_app_environment.main.id
+  replica_timeout_in_seconds   = 1800
+  replica_retry_limit          = 0
+  tags                         = var.tags
+
+  identity {
+    type         = "UserAssigned"
+    identity_ids = [azurerm_user_assigned_identity.migrations.id]
+  }
+
+  registry {
+    server   = azurerm_container_registry.main.login_server
+    identity = azurerm_user_assigned_identity.migrations.id
+  }
+
+  manual_trigger_config {
+    parallelism              = 1
+    replica_completion_count = 1
+  }
+
+  template {
+    container {
+      name   = "migrations"
+      image  = var.migration_image
+      cpu    = 0.5
+      memory = "1Gi"
+
+      env {
+        name  = "AZURE_CLIENT_ID"
+        value = azurerm_user_assigned_identity.migrations.client_id
+      }
+      env {
+        name  = "ConnectionStrings__RelayWorks"
+        value = "Server=tcp:${azurerm_mssql_server.main.fully_qualified_domain_name},1433;Database=${azurerm_mssql_database.control_plane.name};Authentication=Active Directory Default;Encrypt=True;TrustServerCertificate=False"
+      }
+      env {
+        name  = "ConnectionStrings__WorkerLedger"
+        value = "Server=tcp:${azurerm_mssql_server.main.fully_qualified_domain_name},1433;Database=${azurerm_mssql_database.worker_ledger.name};Authentication=Active Directory Default;Encrypt=True;TrustServerCertificate=False"
+      }
+      env {
+        name  = "SqlBootstrap__ControlPlanePrincipalName"
+        value = azurerm_user_assigned_identity.control_plane.name
+      }
+      env {
+        name  = "SqlBootstrap__ControlPlanePrincipalObjectId"
+        value = azurerm_user_assigned_identity.control_plane.principal_id
+      }
+      env {
+        name  = "SqlBootstrap__WorkerPrincipalName"
+        value = azurerm_user_assigned_identity.sync_worker.name
+      }
+      env {
+        name  = "SqlBootstrap__WorkerPrincipalObjectId"
+        value = azurerm_user_assigned_identity.sync_worker.principal_id
+      }
+    }
+  }
+}
+
 resource "azurerm_container_app" "control_plane" {
+  count                        = var.deploy_applications ? 1 : 0
   name                         = "ca-${local.name}-control"
   container_app_environment_id = azurerm_container_app_environment.main.id
   resource_group_name          = azurerm_resource_group.main.name
@@ -402,8 +534,8 @@ resource "azurerm_container_app" "control_plane" {
   }
 
   template {
-    min_replicas = 1
-    max_replicas = 3
+    min_replicas = var.control_plane_min_replicas
+    max_replicas = var.control_plane_max_replicas
     container {
       name   = "control-plane"
       image  = var.control_plane_image
@@ -429,12 +561,34 @@ resource "azurerm_container_app" "control_plane" {
         name  = "Cors__AllowedOrigins__0"
         value = "https://${azurerm_static_web_app.console.default_host_name}"
       }
-      env { name = "Authentication__Enabled" value = "true" }
-      env { name = "AzureAd__TenantId" value = var.tenant_id }
-      env { name = "AzureAd__ClientId" value = var.control_plane_api_client_id }
-      env { name = "Archive__Enabled" value = tostring(var.archive_enabled) }
-      env { name = "Archive__DryRun" value = tostring(var.archive_dry_run) }
-      env { name = "Archive__BlobServiceUri" value = azurerm_storage_account.archive.primary_blob_endpoint }
+      env {
+        name  = "Authentication__Enabled"
+        value = "true"
+      }
+      env {
+        name  = "AzureAd__TenantId"
+        value = var.tenant_id
+      }
+      env {
+        name  = "AzureAd__ClientId"
+        value = var.control_plane_api_client_id
+      }
+      env {
+        name  = "AzureAd__Audience"
+        value = var.control_plane_api_identifier_uri
+      }
+      env {
+        name  = "Archive__Enabled"
+        value = tostring(var.archive_enabled)
+      }
+      env {
+        name  = "Archive__DryRun"
+        value = tostring(var.archive_dry_run)
+      }
+      env {
+        name  = "Archive__BlobServiceUri"
+        value = azurerm_storage_account.archive.primary_blob_endpoint
+      }
 
       liveness_probe {
         transport        = "HTTP"
@@ -463,6 +617,7 @@ resource "azurerm_container_app" "control_plane" {
 }
 
 resource "azurerm_container_app" "sync_worker" {
+  count                        = var.deploy_applications ? 1 : 0
   name                         = "ca-${local.name}-worker"
   container_app_environment_id = azurerm_container_app_environment.main.id
   resource_group_name          = azurerm_resource_group.main.name
@@ -480,10 +635,22 @@ resource "azurerm_container_app" "sync_worker" {
   }
 
   template {
-    min_replicas = 1
+    min_replicas = var.sync_worker_min_replicas
     # The connection-scoped limiter is replica-local. Keep one Worker replica until
     # a distributed lease/token store coordinates destination quotas across replicas.
-    max_replicas = 1
+    max_replicas = var.sync_worker_max_replicas
+
+    custom_scale_rule {
+      name             = "service-bus-queue-scale"
+      custom_rule_type = "azure-servicebus"
+      identity_id      = azurerm_user_assigned_identity.sync_worker.id
+      metadata = {
+        queueName    = azurerm_servicebus_queue.commands.name
+        namespace    = "${azurerm_servicebus_namespace.main.name}.servicebus.windows.net"
+        messageCount = "1"
+      }
+    }
+
     container {
       name   = "sync-worker"
       image  = var.sync_worker_image
@@ -517,8 +684,14 @@ resource "azurerm_container_app" "sync_worker" {
         name  = "ConnectorResilience__BurstCapacityPerConnection"
         value = tostring(var.connector_burst_capacity)
       }
-      env { name = "Retention__Enabled" value = "true" }
-      env { name = "Retention__DryRun" value = tostring(var.archive_dry_run) }
+      env {
+        name  = "Retention__Enabled"
+        value = "true"
+      }
+      env {
+        name  = "Retention__DryRun"
+        value = tostring(var.archive_dry_run)
+      }
     }
   }
 }
