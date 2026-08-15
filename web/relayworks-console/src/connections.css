@@ -27,5 +27,9 @@
 .identity { display: grid; text-align: right; }
 .identity strong { font-size: 12px; }
 .identity small { color: var(--muted); font-size: 10px; }
+.empty-connection-prompt { display: grid; gap: 6px; padding: 10px 12px; border: 1px dashed var(--line); border-radius: 8px; background: var(--surface-2); font-size: 12px; }
+.inline-link { padding: 0; border: none; background: none; color: var(--brand); text-align: left; text-decoration: underline; font-size: 12px; font-weight: 700; cursor: pointer; }
+.inline-link:hover { opacity: .85; }
 @media (max-width: 1050px) { .connection-grid { grid-template-columns: 1fr; } .connection-form { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 650px) { .connection-form { grid-template-columns: 1fr; } .connection-card { align-items: flex-start; flex-direction: column; } .capabilities { justify-content: flex-start; } }
+

@@ -37,8 +37,12 @@ const connectionForm = reactive<CreateConnectionProfileRequest>({
   maxConfirmedNoCommitRetries: 2, secretReference: '',
 })
 
+const activeConnections = computed(() => connections.value.filter(c => c.isActive !== false))
+const hasActiveConnections = computed(() => activeConnections.value.length > 0)
+const connectionManagerOpen = ref(false)
+
 const form = reactive<SubmitIntegrationRunRequest>({
-  connectionId: '857840a1-3440-431d-a696-07616926d50b',
+  connectionId: '',
   operation: 'TimeEntryExport', idempotencyKey: '', totalRecords: 1,
 })
 
@@ -52,6 +56,14 @@ const canOperate = computed(() => canAdmin.value || hasRole('Integration.Operato
 
 function formatStatus(value: string) { return value.replace(/([a-z])([A-Z])/g, '$1 $2') }
 function formatDate(value: string) { return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(value)) }
+
+function openConnectorRegistry() {
+  connectionManagerOpen.value = true
+  const el = document.getElementById('connector-registry')
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth' })
+  }
+}
 
 async function refreshRuns(reset = false) {
   if (reset) { runCursor.value = undefined; runCursorHistory.value = [] }
@@ -105,6 +117,14 @@ async function loadConnections() {
   catch {
     if (authState.enabled) { connections.value = []; message.value = 'Unable to load authorized connections.' }
     else connections.value = demoConnections
+  }
+  finally {
+    const firstActive = activeConnections.value[0]
+    if (firstActive && (!form.connectionId || !activeConnections.value.some(c => c.id === form.connectionId))) {
+      form.connectionId = firstActive.id
+    } else if (!firstActive) {
+      form.connectionId = ''
+    }
   }
 }
 
@@ -216,7 +236,7 @@ onMounted(async () => {
         <article><span>Records processed</span><strong>{{ processedRecords.toLocaleString() }}</strong><small>Current history window</small></article>
       </section>
 
-      <details class="panel connection-manager">
+      <details id="connector-registry" class="panel connection-manager" :open="connectionManagerOpen" @toggle="connectionManagerOpen = ($event.target as HTMLDetailsElement).open">
         <summary><span><span class="eyebrow">Connector registry</span><strong>{{ connections.length }} configured connection{{ connections.length === 1 ? '' : 's' }}</strong></span><span>Manage capabilities</span></summary>
         <div class="connection-grid">
           <article v-for="connection in connections" :key="connection.id" class="connection-card">
@@ -277,7 +297,27 @@ onMounted(async () => {
         </div>
 
         <aside class="panel submit-panel"><p class="eyebrow">New work</p><h2>Submit a run</h2><p>Create an idempotent time-entry export for a configured connection.</p>
-          <form @submit.prevent="submitRun"><label>Authenticated tenant<input :value="authState.tenantId" disabled /></label><label>Connection ID<input v-model.trim="form.connectionId" required /></label><label>Operation<input value="Time entry export" disabled /></label><label>Idempotency key<input v-model.trim="form.idempotencyKey" required placeholder="customer-records-date" /></label><label>Record count<input v-model.number="form.totalRecords" required type="number" min="1" /></label><button class="primary-button" :disabled="submitting || apiUnavailable || !canOperate">{{ submitting ? 'Submitting…' : 'Submit integration run' }}</button></form>
+          <form @submit.prevent="submitRun">
+            <label>Authenticated tenant<input :value="authState.tenantId" disabled /></label>
+            <label>
+              Connection profile
+              <select v-if="hasActiveConnections" v-model="form.connectionId" required>
+                <option v-for="conn in activeConnections" :key="conn.id" :value="conn.id">
+                  {{ conn.name }} ({{ conn.provider }})
+                </option>
+              </select>
+              <div v-else class="empty-connection-prompt">
+                <span>No active connections configured.</span>
+                <button type="button" class="inline-link" @click="openConnectorRegistry">
+                  {{ canAdmin ? 'Create a connection profile in Connector Registry' : 'Contact an administrator to configure a connection' }}
+                </button>
+              </div>
+            </label>
+            <label>Operation<input value="Time entry export" disabled /></label>
+            <label>Idempotency key<input v-model.trim="form.idempotencyKey" required placeholder="customer-records-date" /></label>
+            <label>Record count<input v-model.number="form.totalRecords" required type="number" min="1" /></label>
+            <button class="primary-button" :disabled="submitting || apiUnavailable || !canOperate || !hasActiveConnections">{{ submitting ? 'Submitting…' : 'Submit integration run' }}</button>
+          </form>
           <p v-if="message" class="form-message">{{ message }}</p><small v-if="apiUnavailable" class="form-hint">Start the API to enable submissions.</small>
         </aside>
       </section>
