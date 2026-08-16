@@ -1,0 +1,17 @@
+services:
+  relayworks-portal-php:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: relayworks-portal-php
+    ports:
+      - "8080:8080"
+    volumes:
+      - .:/app
+    environment:
+      - RELAYWORKS_API_URL=http://host.docker.internal:5080
+      - RELAYWORKS_TENANT_ID=5d963a18-c113-4bea-b2c7-c71a121e9f4b
+      - RELAYWORKS_ACTOR_ID=portal-operator
+      - APP_ENV=development
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

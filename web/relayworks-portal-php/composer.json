@@ -1,0 +1,22 @@
+{
+  "name": "relayworks/portal-php",
+  "description": "RelayWorks Modern PHP Portal",
+  "type": "project",
+  "license": "MIT",
+  "require": {
+    "php": ">=8.2"
+  },
+  "scripts": {
+    "test": "php tests/run-tests.php"
+  },
+  "autoload": {
+    "psr-4": {
+      "RelayWorks\\Portal\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "RelayWorks\\Portal\\Tests\\": "tests/"
+    }
+  }
+}
