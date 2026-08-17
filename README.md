@@ -30,6 +30,37 @@ The ledger key is `(tenant, connection, operation, source record, source version
 
 Services share only versioned contracts and never query one another's database.
 
+## Local Development Stack
+
+RelayWorks includes local automation scripts for running the complete container and application ecosystem:
+
+```powershell
+# 1. Start the entire local environment (Containers, Migrations, API, and Vue UI)
+.\scripts\start-local-dev.ps1
+
+# 2. Stop and tear down all running local containers
+.\scripts\stop-local-dev.ps1
+# or
+.\scripts\start-local-dev.ps1 -Down
+```
+
+### Local Services & Ports
+
+| Service | Address | Description |
+| --- | --- | --- |
+| **Control Plane API** | `http://localhost:5080` | ASP.NET Core REST API & OpenAPI docs (`/openapi/v1.json`) |
+| **Vue Operations Console** | `http://localhost:5173` | Vue 3 + Vite integration operations dashboard |
+| **RelayWorks PHP Portal** | `http://localhost:8080` | Lightweight SSR PHP 8.3 reference web portal |
+| **SQL Server 2022** | `127.0.0.1:1433` | Local database container (`relayworks-control`, `relayworks-worker`) |
+| **Azure Service Bus Emulator**| `127.0.0.1:5300` / `5672` | AMQP emulator & HTTP administration endpoint |
+
+### Script Options
+
+- `.\scripts\start-local-dev.ps1 -WithoutPhp` : Start local environment without launching the PHP Portal container.
+- `.\scripts\start-local-dev.ps1 -NoApps` : Start only background containers and execute database migrations.
+- `.\scripts\start-php-portal.ps1` : Start or rebuild only the PHP portal container.
+- `.\scripts\test-php-portal.ps1` : Run the zero-dependency PHP test suite locally or in Docker.
+
 ## Local validation
 
 ```bash
@@ -48,7 +79,7 @@ terraform validate
 
 The slower Worker messaging test runs separately through `.github/workflows/service-bus-e2e.yml` because it requires the Azure Service Bus Emulator and SQL Server containers. It can also be run locally with Docker Compose from `.compose/service-bus` and the two connection-string environment variables defined in that workflow.
 
-Both EF Core migration sets are intended to run from an approved deployment job. Terraform provisions databases and identities but does not execute schema migrations.
+Both EF Core migration sets are intended to run from an approved deployment job. Terraform provisions databases and identities but does not execute schema migrations. Locally, migrations can be executed directly using `.\scripts\run-migrations.ps1`.
 
 ## Status
 

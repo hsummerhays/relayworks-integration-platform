@@ -1,5 +1,12 @@
 # Changelog
 
+## Iteration 20 — 2026-08-16: Local Development Automation & Modern PHP Portal
+
+- Built unified PowerShell development scripts (`start-local-dev.ps1`, `stop-local-dev.ps1`, `run-migrations.ps1`, `start-php-portal.ps1`, `test-php-portal.ps1`) managing container lifecycle, SQL Server readiness polling, migration execution, and parallel application processes.
+- Created modern, server-side-rendered PHP 8.3 reference operations portal (`web/relayworks-portal-php`) with strict typing, PSR-4 routing, zero external dependencies, dark-mode CSS theme, and connection probe tester.
+- Updated ASP.NET Core Control Plane API network bindings to `http://0.0.0.0:5080` to support containerized host gateway communication (`host.docker.internal`).
+- Documented Azure cloud startup and runtime lifecycle architecture (Managed Identities, Container Apps Jobs, Service Bus RBAC, and cloud vs. local topology comparison).
+
 ## Iteration 19 — 2026-08-15: Provider Adapter Architecture
 
 - Established a formal provider adapter architecture with `IIntegrationAdapter`, `ITimeEntrySourceAdapter`, and `ITimeEntryDestinationAdapter`.
