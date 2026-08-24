@@ -1,5 +1,10 @@
 # Changelog
 
+## Maintenance — 2026-08-24: Infrastructure Variable Sanitization & PII Removal
+
+- Sanitized Terraform defaults across `infra/modules/relayworks-platform` and `infra/environments/dev` by replacing tenant-specific Entra ID URI and email defaults with generic placeholders.
+- Updated `terraform.tfvars.example` to document configurable API identifier URI and budget notification email variables.
+
 ## Iteration 20 — 2026-08-16: Local Development Automation & Modern PHP Portal
 
 - Built unified PowerShell development scripts (`start-local-dev.ps1`, `stop-local-dev.ps1`, `run-migrations.ps1`, `start-php-portal.ps1`, `test-php-portal.ps1`) managing container lifecycle, SQL Server readiness polling, migration execution, and parallel application processes.
