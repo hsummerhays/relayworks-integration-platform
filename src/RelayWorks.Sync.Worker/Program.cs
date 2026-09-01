@@ -52,7 +52,7 @@ builder.Services.AddOptions<WorkerRetentionOptions>().Bind(builder.Configuration
         "Worker retention values are outside safe bounds.").ValidateOnStart();
 builder.Services.AddSingleton<ITimeEntrySourceAdapter, SimulatedFieldOperationsAdapter>();
 builder.Services.AddSingleton<ITimeEntryDestinationAdapter, SimulatedAccountingAdapter>();
-builder.Services.AddSingleton<ITimeEntryDestinationAdapter, FieldFloAccountingAdapter>();
+builder.Services.AddSingleton<ITimeEntryDestinationAdapter, SimulatedPayrollAdapter>();
 builder.Services.AddSingleton<IAdapterRegistry, AdapterRegistry>();
 builder.Services.AddScoped<ITimeEntrySourceConnector, RegistryTimeEntrySourceConnector>();
 builder.Services.AddHttpClient();

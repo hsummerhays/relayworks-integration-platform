@@ -14,7 +14,7 @@ public sealed class AdapterRegistryAndContractTests
         var services = new ServiceCollection();
         services.AddSingleton<ITimeEntrySourceAdapter, SimulatedFieldOperationsAdapter>();
         services.AddSingleton<ITimeEntryDestinationAdapter, SimulatedAccountingAdapter>();
-        services.AddSingleton<ITimeEntryDestinationAdapter, FieldFloAccountingAdapter>();
+        services.AddSingleton<ITimeEntryDestinationAdapter, SimulatedPayrollAdapter>();
         services.AddSingleton<IAdapterRegistry, AdapterRegistry>();
         return services.BuildServiceProvider();
     }
@@ -29,9 +29,9 @@ public sealed class AdapterRegistryAndContractTests
         Assert.NotNull(accounting);
         Assert.Equal("SimulatedAccounting", accounting.Provider);
 
-        var fieldFlo = registry.GetDestinationAdapter("FieldFloAccounting");
-        Assert.NotNull(fieldFlo);
-        Assert.Equal("FieldFloAccounting", fieldFlo.Provider);
+        var payroll = registry.GetDestinationAdapter("SimulatedPayroll");
+        Assert.NotNull(payroll);
+        Assert.Equal("SimulatedPayroll", payroll.Provider);
     }
 
     [Fact]
@@ -47,7 +47,7 @@ public sealed class AdapterRegistryAndContractTests
     {
         var provider = BuildTestServiceProvider();
         var registry = provider.GetRequiredService<IAdapterRegistry>();
-        var source = registry.GetSourceAdapter("FieldFlo");
+        var source = registry.GetSourceAdapter("SimulatedFieldOperations");
 
         var request = new TimeEntryReadRequest(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), 5, DateTimeOffset.UtcNow);
         var context = new ConnectorContext(request.TenantId, request.ConnectionId, "v1", source.Capabilities, new ApiKeyAuthenticator("key"));
@@ -136,7 +136,7 @@ public sealed class AdapterRegistryAndContractTests
 
         var ex = Assert.Throws<InvalidOperationException>(() => new AdapterRegistry([adapter1, adapter2], []));
         Assert.Contains("Duplicate source adapter registration", ex.Message);
-        Assert.Contains("FieldFlo", ex.Message);
+        Assert.Contains("SimulatedFieldOperations", ex.Message);
     }
 
     public static TheoryData<ITimeEntryDestinationAdapter> GetRegisteredAdaptersFromDi()

@@ -4,7 +4,7 @@ namespace RelayWorks.Sync.Worker.Adapters;
 
 public sealed class SimulatedFieldOperationsAdapter : ITimeEntrySourceAdapter
 {
-    public string Provider => "FieldFlo";
+    public string Provider => "SimulatedFieldOperations";
 
     public ConnectorCapabilities Capabilities { get; } = new(
         SupportsIdempotencyKey: true,

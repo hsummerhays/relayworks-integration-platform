@@ -3,11 +3,11 @@ using RelayWorks.Contracts.TimeEntries;
 
 namespace RelayWorks.Sync.Worker.Adapters;
 
-public sealed class FieldFloAccountingAdapter : ITimeEntryDestinationAdapter
+public sealed class SimulatedPayrollAdapter : ITimeEntryDestinationAdapter
 {
     private static readonly ConcurrentDictionary<string, string> Committed = new(StringComparer.Ordinal);
 
-    public string Provider => "FieldFloAccounting";
+    public string Provider => "SimulatedPayroll";
 
     public ConnectorCapabilities Capabilities { get; } = new(
         SupportsIdempotencyKey: true,
@@ -30,7 +30,7 @@ public sealed class FieldFloAccountingAdapter : ITimeEntryDestinationAdapter
             return Task.FromResult(new DestinationWriteResult(DestinationWriteStatus.Rejected,
                 ErrorCode: errors[0], ErrorMessage: string.Join(", ", errors)));
 
-        var reference = $"fieldflo-acct:{entry.TenantId:N}:{entry.SourceRecordId}:{entry.SourceVersion}";
+        var reference = $"sim-payroll:{entry.TenantId:N}:{entry.SourceRecordId}:{entry.SourceVersion}";
         Committed[idempotencyKey] = reference;
         return Task.FromResult(new DestinationWriteResult(DestinationWriteStatus.Succeeded, reference));
     }

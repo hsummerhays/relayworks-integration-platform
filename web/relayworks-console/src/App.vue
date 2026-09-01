@@ -33,7 +33,7 @@ const resolutionNotes = reactive<Record<string, string>>({})
 const connectionTests = reactive<Record<string, ConnectionTest>>({})
 const connectionForm = reactive<CreateConnectionProfileRequest>({
   id: crypto.randomUUID(), name: '',
-  provider: 'FieldFloAccounting', authType: 'ApiKey', supportsIdempotencyKey: true, supportsReadAfterWrite: true,
+  provider: 'SimulatedPayroll', authType: 'ApiKey', supportsIdempotencyKey: true, supportsReadAfterWrite: true,
   maxConfirmedNoCommitRetries: 2, secretReference: '',
 })
 
@@ -245,7 +245,7 @@ onMounted(async () => {
             <button class="secondary-button test-button" :disabled="!canOperate || connectionTests[connection.id]?.status === 'Pending'" @click="testConnection(connection)">{{ connectionTests[connection.id]?.status === 'Pending' ? 'Testing…' : 'Test connection' }}</button>
           </article>
           <form v-if="canAdmin" class="connection-form" @submit.prevent="saveConnection">
-            <label>Connection name<input v-model.trim="connectionForm.name" required placeholder="FieldFlo → Sage 100" /></label>
+            <label>Connection name<input v-model.trim="connectionForm.name" required placeholder="Field Operations → Accounting" /></label>
             <label>Provider<input v-model.trim="connectionForm.provider" required /></label>
             <label>Authentication strategy<select v-model="connectionForm.authType"><option value="ApiKey">API Key (Header)</option><option value="OAuth2">OAuth 2.0 (Client Credentials)</option><option value="Basic">Basic Auth (Base64)</option><option value="MutualTls">Mutual TLS (Certificate)</option></select></label>
             <label>Key Vault secret URI<input v-model.trim="connectionForm.secretReference" required placeholder="https://vault.vault.azure.net/secrets/customer" /></label>

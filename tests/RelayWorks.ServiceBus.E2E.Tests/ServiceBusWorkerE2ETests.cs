@@ -138,7 +138,7 @@ public sealed class ServiceBusWorkerE2ETests
             .AddScoped<IIntegrationRunRepository, SqlIntegrationRunRepository>()
             .AddSingleton<ITimeEntrySourceAdapter, SimulatedFieldOperationsAdapter>()
             .AddSingleton<ITimeEntryDestinationAdapter, SimulatedAccountingAdapter>()
-            .AddSingleton<ITimeEntryDestinationAdapter, FieldFloAccountingAdapter>()
+            .AddSingleton<ITimeEntryDestinationAdapter, SimulatedPayrollAdapter>()
             .AddSingleton<IAdapterRegistry, AdapterRegistry>()
             .AddScoped<ITimeEntrySourceConnector, RegistryTimeEntrySourceConnector>()
             .AddSingleton<ITimeEntryDestinationConnectorFactory>(new FixedConnectorFactory(destination))

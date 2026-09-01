@@ -12,12 +12,12 @@ public sealed class RegistryTimeEntrySourceConnector(
     {
         var profile = command.ConnectorProfile ?? throw new InvalidOperationException("Connector profile is required.");
         
-        // Resolve the source adapter from the dynamic registry (defaulting to FieldFlo for time entry exports if unspecified)
-        var provider = string.IsNullOrWhiteSpace(profile.Provider) ? "FieldFlo" : profile.Provider;
+        // Resolve the source adapter from the dynamic registry (defaulting to SimulatedFieldOperations for time entry exports if unspecified)
+        var provider = string.IsNullOrWhiteSpace(profile.Provider) ? "SimulatedFieldOperations" : profile.Provider;
         if (!adapterRegistry.TryGetSourceAdapter(provider, out var adapter) || adapter is null)
         {
             // If the execution profile provider is a destination provider (e.g. SimulatedAccounting), resolve the default source adapter
-            adapter = adapterRegistry.GetSourceAdapter("FieldFlo");
+            adapter = adapterRegistry.GetSourceAdapter("SimulatedFieldOperations");
         }
 
         var capabilities = new ConnectorCapabilities(

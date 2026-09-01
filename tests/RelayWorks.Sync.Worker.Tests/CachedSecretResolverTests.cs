@@ -14,7 +14,7 @@ public sealed class CachedSecretResolverTests
         using var cache = new MemoryCache(new MemoryCacheOptions());
         var resolver = new CachedSecretResolver(cache, provider, new PassThroughRouter(), TimeProvider.System,
             NullLogger<CachedSecretResolver>.Instance);
-        var locator = new SecretLocatorV1(new Uri("https://tenant.vault.azure.net"), "fieldflo", "v1");
+        var locator = new SecretLocatorV1(new Uri("https://tenant.vault.azure.net"), "field-operations-payroll", "v1");
 
         await Task.WhenAll(Enumerable.Range(0, 5000).Select(_ => resolver.ResolveAsync(locator, default)));
 
